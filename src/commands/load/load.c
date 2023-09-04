@@ -9,19 +9,32 @@
 #define RGB_SIZE 3
 #define MULTIPLIER_SIZE 4
 
-struct command_options {
+typedef struct {
     char* image_filename;
     char* palette_name;
-    int palette_r[PALETTE_SIZE][MULTIPLIER_SIZE];
-    int palette_g[PALETTE_SIZE][MULTIPLIER_SIZE];
-    int palette_b[PALETTE_SIZE][MULTIPLIER_SIZE];
-};
+} command_options;
 
-static struct command_options local_config = {};
+typedef struct {
+    int r[PALETTE_SIZE][MULTIPLIER_SIZE];
+    int g[PALETTE_SIZE][MULTIPLIER_SIZE];
+    int b[PALETTE_SIZE][MULTIPLIER_SIZE];
+} mapart_palette;
 
-int get_palette(main_options config);
+typedef struct {
+    unsigned char* image_data;
+    int x;
+    int y;
+    int channels;
+} image_data;
 
-int load_command(int argc, char** argv, main_options config){
+void load_cleanup(image_data* image);
+
+int get_palette(main_options *config, command_options *local_config, mapart_palette *palette);
+
+int load_image(command_options *options, image_data* image);
+
+int load_command(int argc, char** argv, main_options *config){
+    command_options local_config = {};
     int ret = 0;
 
     printf("\nLoad command start\n\n");
@@ -70,23 +83,23 @@ int load_command(int argc, char** argv, main_options config){
         return 4;
     }
 
-    ret = get_palette(config);
+    mapart_palette palette= {};
+    image_data image = {};
+
+
+    ret = get_palette(config, &local_config, &palette);
 
     //if everything is ok
     if (ret == 0){
-        //load the image
-        int i_x, i_y, i_channels;
-        unsigned char * data = stbi_load(local_config.image_filename, &i_x, &i_y, &i_channels, 0);
-        //TODO add worker
-
-
-
+        ret = load_image(&local_config, &image);
     }
 
+
+    load_cleanup(&image);
     return ret;
 }
 
-int get_palette(main_options config){
+int get_palette(main_options *config, command_options *local_config, mapart_palette *palette){
     int ret = 0;
     mongoc_client_t *client;
     mongoc_collection_t *collection;
@@ -98,9 +111,9 @@ int get_palette(main_options config){
     //init palette to invalid values
     for (int i = 0; i< PALETTE_SIZE; i++){
         for (int j = 0; j < MULTIPLIER_SIZE; j++) {
-            local_config.palette_r[i][j] = -255;
-            local_config.palette_g[i][j] = -255;
-            local_config.palette_b[i][j] = -255;
+            palette->r[i][j] = -255;
+            palette->g[i][j] = -255;
+            palette->b[i][j] = -255;
         }
     }
 
@@ -108,14 +121,14 @@ int get_palette(main_options config){
 
     printf("Loading palette\n");
 
-    client = mongoc_client_pool_pop(config.mongo_session.pool);
+    client = mongoc_client_pool_pop(config->mongo_session.pool);
 
-    collection = mongoc_client_get_collection(client, config.mongodb_database, "config");
+    collection = mongoc_client_get_collection(client, config->mongodb_database, "config");
 
     query = bson_new();
 
     BSON_APPEND_UTF8(query, "id", "palette");
-    BSON_APPEND_UTF8(query, "name", local_config.palette_name);
+    BSON_APPEND_UTF8(query, "name", (*local_config).palette_name);
 
     cursor = mongoc_collection_find_with_opts(collection, query, NULL, NULL);
 
@@ -154,17 +167,17 @@ int get_palette(main_options config){
                     if (color_id != 0){
                         // prepare the various multipliers
                         for (int i = 0; i < MULTIPLIER_SIZE; i++) {
-                            local_config.palette_r[color_id][i] = (int)floor((double)rgb[0] * multipliers[i] / 255);
-                            local_config.palette_g[color_id][i] = (int)floor((double)rgb[1] * multipliers[i] / 255);
-                            local_config.palette_b[color_id][i] = (int)floor((double)rgb[2] * multipliers[i] / 255);
+                            palette->r[color_id][i] = (int)floor((double)rgb[0] * multipliers[i] / 255);
+                            palette->g[color_id][i] = (int)floor((double)rgb[1] * multipliers[i] / 255);
+                            palette->b[color_id][i] = (int)floor((double)rgb[2] * multipliers[i] / 255);
                         }
                     }
                 }
             }
         }
-        printf("Palette loaded\n");
+        printf("Palette loaded\n\n");
     }else{
-        fprintf (stderr,"Palette %s not Found!\n", local_config.palette_name);
+        fprintf (stderr,"Palette %s not Found!\n", local_config->palette_name);
         ret = 9;
     }
 
@@ -172,7 +185,30 @@ int get_palette(main_options config){
     mongoc_cursor_destroy (cursor);
     mongoc_collection_destroy (collection);
 
-    mongoc_client_pool_push(config.mongo_session.pool, client);
+    mongoc_client_pool_push(config->mongo_session.pool, client);
 
     return ret;
+}
+
+
+int load_image(command_options *options, image_data* image){
+    printf("Loading image\n");
+    //load the image
+    if(access(options->image_filename, F_OK) == 0 && access(options->image_filename, R_OK) == 0) {
+        image->image_data = stbi_load(options->image_filename, &image->x, &image->y, &image->channels, 0);
+        if (image->image_data == NULL){
+            fprintf (stderr,"Failed to load image %s:\n%s\n", options->image_filename, stbi_failure_reason());
+            return 10;
+        }
+        printf("Image loaded: %dx%d(%d)\n\n", image->x, image->y, image->channels);
+    }else{
+        fprintf (stderr,"Failed to load image %s:\nFile does not exists\n", options->image_filename);
+        return 10;
+    }
+    return 0;
+}
+
+void load_cleanup(image_data* image){
+    if (image->image_data != NULL)
+        stbi_image_free(image->image_data);
 }

@@ -4,19 +4,17 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-struct mongo_session_struct {
+typedef struct {
     mongoc_uri_t* uri;
     mongoc_client_pool_t* pool;
-};
+} mongo_session_struct;
 
-#define mongo_session_struct struct mongo_session_struct
 
-struct main_options {
+typedef struct  {
     char* mongodb_uri;
     char* mongodb_database;
     char* project_name;
     mongo_session_struct mongo_session;
-};
+} main_options;
 
-#define main_options struct main_options
 #endif
