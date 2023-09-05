@@ -7936,7 +7936,7 @@ STBIDEF int stbi_is_16_bit_from_callbacks(stbi_io_callbacks const *c, void *user
       0.55    fix bug: restart_interval not initialized to 0
       0.54    allow NULL for 'int *comp'
       0.53    fix bug in png 3->4; speedup png decoding
-      0.52    png handles req_comp=3,4 directly; minor load_cleanup; jpeg comments
+      0.52    png handles req_comp=3,4 directly; minor cleanup; jpeg comments
       0.51    obey req_comp requests, 1-component jpegs return as 1-component,
               on 'test' only check type, not whether we support this variant
       0.50  (2006-11-19)

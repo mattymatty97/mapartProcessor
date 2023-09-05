@@ -6,14 +6,14 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "libs/images/stb_image.h"
-#include "libs/globaltypes.h"
+#include "libs/globaldefs.h"
 #include "commands/load/load.h"
 
 static main_options config;
 
 struct cmd_struct {
     const char *cmd;
-    int (*fn) (int, char **, main_options);
+    int (*fn) (int, char **, main_options*);
 };
 
 void connect_mongodb();
@@ -22,7 +22,8 @@ void cleanup();
 static struct option long_options[] = {
         {"mongo-uri", required_argument, 0, 'u'},
         {"mongo-database", required_argument, 0, 'd'},
-        {"project-name", required_argument, 0, 'p'}
+        {"project-name", required_argument, 0, 'p'},
+        {"threads", required_argument, 0, 't'}
 };
 
 static struct cmd_struct commands[] = {
@@ -33,8 +34,12 @@ int main(int argc, char** argv) {
     int ret;
     int c;
     opterr = 0;
+
+    config.threads = get_processor_count();
+
     int option_index = 0;
-    while ((c = getopt_long (argc, argv, "+:u:d:p:", long_options, &option_index)) != -1){
+    unsigned long thread_count;
+    while ((c = getopt_long (argc, argv, "+:u:d:p:t:", long_options, &option_index)) != -1){
         switch (c)
         {
             case 0:
@@ -57,6 +62,12 @@ int main(int argc, char** argv) {
 
             case 'p':
                 config.project_name = strdup(optarg);
+                break;
+
+            case 't':
+                thread_count = strtol(optarg, NULL, 10);
+                if (thread_count>0)
+                    config.threads = thread_count;
                 break;
 
             case ':':
@@ -85,7 +96,7 @@ int main(int argc, char** argv) {
     }
     if (cmd) {
         optind++;
-        ret = cmd->fn(argc, argv, config);
+        ret = cmd->fn(argc, argv, &config);
     }else {
         fprintf (stderr,
                  "Missing Command\n");

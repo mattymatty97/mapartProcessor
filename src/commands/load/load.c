@@ -3,7 +3,7 @@
 #include <math.h>
 
 #include "../../libs/images/stb_image.h"
-#include "../../libs/globaltypes.h"
+#include "../../libs/globaldefs.h"
 
 #define PALETTE_SIZE 62
 #define RGB_SIZE 3
@@ -93,7 +93,6 @@ int load_command(int argc, char** argv, main_options *config){
     if (ret == 0){
         ret = load_image(&local_config, &image);
     }
-
 
     load_cleanup(&image);
     return ret;
@@ -189,7 +188,6 @@ int get_palette(main_options *config, command_options *local_config, mapart_pale
 
     return ret;
 }
-
 
 int load_image(command_options *options, image_data* image){
     printf("Loading image\n");
