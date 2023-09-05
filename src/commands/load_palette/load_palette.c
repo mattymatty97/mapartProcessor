@@ -10,7 +10,6 @@
 #define MULTIPLIER_SIZE 4
 
 typedef struct {
-    char* image_filename;
     char* palette_name;
 } command_options;
 
@@ -20,33 +19,21 @@ typedef struct {
     int b[PALETTE_SIZE][MULTIPLIER_SIZE];
 } mapart_palette;
 
-typedef struct {
-    unsigned char* image_data;
-    int x;
-    int y;
-    int channels;
-} image_data;
-
-void load_cleanup(image_data* image);
-
 int get_palette(main_options *config, command_options *local_config, mapart_palette *palette);
 
-int load_image(command_options *options, image_data* image);
-
-int load_command(int argc, char** argv, main_options *config){
+int load_palette_command(int argc, char** argv, main_options *config){
     command_options local_config = {};
     int ret = 0;
 
     printf("\nLoad command start\n\n");
     static struct option long_options[] = {
-            {"image", required_argument, 0, 'i'},
             {"palette", required_argument, 0, 'p'}
     };
 
     int c;
     opterr = 0;
     int option_index = 0;
-    while ((c = getopt_long (argc, argv, "+:i:p:", long_options, &option_index)) != -1){
+    while ((c = getopt_long (argc, argv, "+:p:", long_options, &option_index)) != -1){
         switch (c)
         {
             case 0:
@@ -57,10 +44,6 @@ int load_command(int argc, char** argv, main_options *config){
                 if (optarg)
                     printf (" with arg %s", optarg);
                 printf ("\n");
-                break;
-
-            case 'i':
-                local_config.image_filename = strdup(optarg);
                 break;
 
             case 'p':
@@ -78,23 +61,20 @@ int load_command(int argc, char** argv, main_options *config){
         }
     }
 
-    if (local_config.palette_name == 0 || local_config.image_filename == 0){
+    if (local_config.palette_name == 0 ){
         printf("missing required options\n");
         return 4;
     }
 
     mapart_palette palette= {};
-    image_data image = {};
-
 
     ret = get_palette(config, &local_config, &palette);
 
     //if everything is ok
     if (ret == 0){
-        ret = load_image(&local_config, &image);
+       ;
     }
 
-    load_cleanup(&image);
     return ret;
 }
 
@@ -187,26 +167,4 @@ int get_palette(main_options *config, command_options *local_config, mapart_pale
     mongoc_client_pool_push(config->mongo_session.pool, client);
 
     return ret;
-}
-
-int load_image(command_options *options, image_data* image){
-    printf("Loading image\n");
-    //load the image
-    if(access(options->image_filename, F_OK) == 0 && access(options->image_filename, R_OK) == 0) {
-        image->image_data = stbi_load(options->image_filename, &image->x, &image->y, &image->channels, 0);
-        if (image->image_data == NULL){
-            fprintf (stderr,"Failed to load image %s:\n%s\n", options->image_filename, stbi_failure_reason());
-            return 10;
-        }
-        printf("Image loaded: %dx%d(%d)\n\n", image->x, image->y, image->channels);
-    }else{
-        fprintf (stderr,"Failed to load image %s:\nFile does not exists\n", options->image_filename);
-        return 10;
-    }
-    return 0;
-}
-
-void load_cleanup(image_data* image){
-    if (image->image_data != NULL)
-        stbi_image_free(image->image_data);
 }

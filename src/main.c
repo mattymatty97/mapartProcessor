@@ -7,7 +7,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "libs/images/stb_image.h"
 #include "libs/globaldefs.h"
-#include "commands/load/load.h"
+#include "commands/load_image/load_image.h"
 
 static main_options config;
 
@@ -27,7 +27,7 @@ static struct option long_options[] = {
 };
 
 static struct cmd_struct commands[] = {
-        {"load", load_command}
+        {"load_image", load_image_command}
 };
 
 int main(int argc, char** argv) {
