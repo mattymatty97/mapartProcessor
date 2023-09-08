@@ -2,8 +2,10 @@
 #include <getopt.h>
 #include <pthread.h>
 #include <math.h>
+#include <libgen.h>
 
 #include "../../libs/images/stb_image.h"
+#include "../../libs/images/stb_image_write.h"
 #include "../../libs/globaldefs.h"
 #include "../../opencl/gpu.h"
 
@@ -128,6 +130,8 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
     image_colorspace colorspace = RGB;
 
+    dither_algorithm dither = none;
+
     mapart_palette palette = {};
 
     image_int_data *processed_image = NULL;
@@ -142,6 +146,15 @@ int load_image_command(int argc, char **argv, main_options *config) {
     }else{
         fprintf(stderr,"Not a valid colorspace %s", local_config.color_space);
         ret = 45;
+    }
+
+    if (ret == 0){
+        if (strcmp(local_config.dithering, "none") == 0){
+             dither = none;
+        }else{
+            fprintf(stderr,"Not a valid dither algorithm %s", local_config.dithering);
+            ret = 46;
+        }
     }
 
     if ( ret == 0) {
@@ -242,12 +255,41 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
         }
     }
-
+    unsigned char* dithered_image = NULL;
     //do dithering
     if (ret == 0){
-
+        if (dither == none){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_none(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        }
     }
 
+    //save result
+    if (ret == 0){
+
+        image_data converted_image = {NULL, image.x, image.y, 4};
+
+        converted_image.image_data = calloc(image.x * image.y * 4,sizeof(unsigned char));
+
+        ret = gpu_palette_to_rgb(&config->gpu, dithered_image, &palette.palette[0][0][0], converted_image.image_data, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE);
+
+        if (ret == 0) {
+            char filename[1000] = {};
+            sprintf(filename, "%s_%s_%s.png", config->project_name, local_config.color_space, local_config.dithering);
+            ret = stbi_write_png(filename, converted_image.x, converted_image.y, converted_image.channels, converted_image.image_data, 0);
+            if (ret == 0){
+                fprintf(stderr, "Failed to save image %s:\n%s\n", filename, stbi_failure_reason());
+                ret = 13;
+            }else{
+                ret = 0;
+            }
+        }
+
+        free(converted_image.image_data);
+    }
+
+    if (dithered_image != NULL)
+        free(dithered_image);
     image_int_cleanup(&processed_image);
     if (processed_palette != &palette)
         palette_cleanup(&processed_palette);

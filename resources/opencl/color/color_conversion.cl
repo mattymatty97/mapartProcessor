@@ -95,7 +95,7 @@ __kernel void xyz_to_lab(__global const float *In, __global int *Out, const unsi
     }
 }
 
-__kernel void lab_to_lch(__global const int *In, __global int *Out, const int channels) {
+__kernel void lab_to_lhc(__global const int *In, __global int *Out, const unsigned char channels) {
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 

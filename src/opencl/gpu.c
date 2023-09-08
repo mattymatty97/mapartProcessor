@@ -4,6 +4,9 @@
 #include <sys/types.h>
 #include "gpu.h"
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 cl_program gpu_compile_program(gpu_t * gpu_holder, char * foldername, cl_int * ret);
@@ -52,7 +55,11 @@ int gpu_init(gpu_t* gpu_holder){
     gpu_holder->platformId = platform_id[platform_index];
     gpu_holder->deviceId = device_id[platform_index][device_index];
 
-    cl_context context = gpu_holder->context = clCreateContext(NULL, 1, &device_id[platform_index][device_index], NULL, NULL, &ret);
+    ret = clGetDeviceInfo(gpu_holder->deviceId, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof (size_t), &gpu_holder->max_parallelism, NULL);
+
+    cl_context context;
+    if (ret == 0)
+        context = gpu_holder->context = clCreateContext(NULL, 1, &device_id[platform_index][device_index], NULL, NULL, &ret);
 
     //if all is ok
     if (ret == 0){
@@ -68,6 +75,28 @@ int gpu_init(gpu_t* gpu_holder){
         };
 
         gpu_holder->programs[0] = program;
+
+    }
+
+    if (ret == 0){
+
+        gpu_program program = {
+                "dithering",
+                gpu_compile_program(gpu_holder,"resources/opencl/dither", &ret)
+        };
+
+        gpu_holder->programs[1] = program;
+
+    }
+
+    if (ret == 0){
+
+        gpu_program program = {
+                "mapart",
+                gpu_compile_program(gpu_holder,"resources/opencl/mapart", &ret)
+        };
+
+        gpu_holder->programs[2] = program;
 
     }
 
@@ -200,7 +229,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigne
         ret = clSetKernelArg(kernel, 2, sizeof(const unsigned char), (void *)&channels);
 
     size_t global_item_size = x * y;
-    size_t local_item_size = y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
 
     //request the gpu process
     if (ret == 0)
@@ -257,7 +286,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigne
         ret = clSetKernelArg(kernel, 2, sizeof(const unsigned char), (void *)&channels);
 
     size_t global_item_size = x * y;
-    size_t local_item_size = y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
 
     //request the gpu process
     if (ret == 0)
@@ -314,7 +343,7 @@ int gpu_lab_to_lhc(gpu_t *gpu, int *input, int*output, unsigned int x, unsigned 
         ret = clSetKernelArg(kernel, 2, sizeof(const unsigned char), (void *)&channels);
 
     size_t global_item_size = x * y;
-    size_t local_item_size = y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
 
     //request the gpu process
     if (ret == 0)
@@ -338,3 +367,148 @@ int gpu_lab_to_lhc(gpu_t *gpu, int *input, int*output, unsigned int x, unsigned 
 
     return ret;
 }
+
+int gpu_dither_none(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+    unsigned long buffer_size = x * y * channels;
+    unsigned long palette_size = palette_indexes * palette_variations * 4;
+    unsigned long result_size = x * y * 2;
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem palette_mem_obj = NULL;
+    cl_mem output_mem_obj = NULL;
+    cl_kernel kernel = NULL;
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                   buffer_size * sizeof(int), NULL, &ret);
+    if (ret == 0)
+        palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                         palette_size * sizeof(int), NULL, &ret);
+    if (ret == 0)
+        output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
+                                        result_size * sizeof(unsigned char), NULL, &ret);
+
+    //copy input into the memory object
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), input, 0, NULL, NULL);
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (int), palette, 0, NULL, NULL);
+
+    //create kernel
+    if (ret == 0)
+        kernel = clCreateKernel(gpu->programs[1].program, "no_dithering", &ret);
+
+    //set kernel arguments
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&input_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&palette_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void*)&output_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 3, sizeof(const unsigned char), (void *)&channels);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 4, sizeof(const unsigned char), (void *)&palette_indexes);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 5, sizeof(const unsigned char), (void *)&palette_variations);
+
+    size_t global_item_size = x * y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
+
+    //request the gpu process
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, NULL);
+
+    //read the results
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, result_size * sizeof (unsigned char), result, 0 ,NULL, NULL);
+
+    //flush remaining tasks
+    if (ret == 0)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (palette_mem_obj != NULL)
+        clReleaseMemObject(palette_mem_obj);
+    if (output_mem_obj != NULL)
+        clReleaseMemObject(output_mem_obj);
+
+    return ret;
+}
+
+int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations){
+    unsigned long buffer_size = x * y * 2;
+    unsigned long palette_size = palette_indexes * palette_variations * 4;
+    unsigned long result_size = x * y * 4;
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem palette_mem_obj = NULL;
+    cl_mem output_mem_obj = NULL;
+    cl_kernel kernel = NULL;
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                   buffer_size * sizeof(unsigned char), NULL, &ret);
+    if (ret == 0)
+        palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                         palette_size * sizeof(int), NULL, &ret);
+    if (ret == 0)
+        output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
+                                        result_size * sizeof(unsigned char), NULL, &ret);
+
+    //copy input into the memory object
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (unsigned char), input, 0, NULL, NULL);
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (int), palette, 0, NULL, NULL);
+
+    //create kernel
+    if (ret == 0)
+        kernel = clCreateKernel(gpu->programs[2].program, "palette_to_rgb", &ret);
+
+    //set kernel arguments
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&input_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&palette_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void*)&output_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 3, sizeof(const unsigned char), (void *)&palette_indexes);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 4, sizeof(const unsigned char), (void *)&palette_variations);
+
+    size_t global_item_size = x * y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
+
+    //request the gpu process
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, NULL);
+
+    //read the results
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, result_size * sizeof (unsigned char), result, 0 ,NULL, NULL);
+
+    //flush remaining tasks
+    if (ret == 0)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (palette_mem_obj != NULL)
+        clReleaseMemObject(palette_mem_obj);
+    if (output_mem_obj != NULL)
+        clReleaseMemObject(output_mem_obj);
+
+    return ret;
+}
+

@@ -16,6 +16,7 @@ typedef struct  {
 typedef struct {
     cl_platform_id platformId;
     cl_device_id deviceId;
+    size_t max_parallelism;
     cl_context context;
     cl_command_queue commandQueue;
     gpu_program programs[3];
@@ -27,5 +28,9 @@ void gpu_clear(gpu_t *);
 int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigned int y, unsigned char channels);
 int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigned int y, unsigned char channels);
 int gpu_lab_to_lhc(gpu_t *gpu, int *input, int*output, unsigned int x, unsigned int y, unsigned char channels);
+
+int gpu_dither_none(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations);
+
+int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations);
 
 #endif

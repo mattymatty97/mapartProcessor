@@ -6,6 +6,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "libs/images/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "libs/images/stb_image_write.h"
 #include "libs/globaldefs.h"
 #include "commands/load_image/load_image.h"
 #include "opencl/gpu.h"
