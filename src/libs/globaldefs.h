@@ -1,23 +1,10 @@
 #ifndef GOBALDEFS_DEF
 #define GOBALDEFS_DEF
-#include <mongoc/mongoc.h>
 
-#if defined(__WIN32__) || defined(__WIN64__) || defined(__WINNT__)
-#include <windows.h>
-unsigned long get_processor_count(){
-    SYSTEM_INFO siSysInfo;
-    GetSystemInfo(&siSysInfo);
-    return siSysInfo.dwNumberOfProcessors;
-}
-#elif defined(__linux__)
-unsigned long get_processor_count(){
-    return sysconf(_SC_NPROCESSORS_ONLN);
-}
-#else
-unsigned long get_processor_count(){
-    return 1;
-}
-#endif
+#include <mongoc/mongoc.h>
+#include <stdatomic.h>
+#include <pthread.h>
+#include "../opencl/gpu.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
@@ -33,6 +20,17 @@ typedef struct  {
     char* project_name;
     unsigned long threads;
     mongo_session_struct mongo_session;
+    gpu_t gpu;
+    _Atomic unsigned long count;
 } main_options;
+
+typedef struct {
+    pthread_t thread_id;
+    _Atomic unsigned long *count;
+    _Atomic bool stopped;
+    unsigned long total;
+} logger_t;
+
+void * logger_worker(void *);
 
 #endif

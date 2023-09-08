@@ -8,6 +8,25 @@
 #include "libs/images/stb_image.h"
 #include "libs/globaldefs.h"
 #include "commands/load_image/load_image.h"
+#include "opencl/gpu.h"
+
+
+#if defined(__WIN32__) || defined(__WIN64__) || defined(__WINNT__)
+#include <windows.h>
+unsigned long get_processor_count(){
+    SYSTEM_INFO siSysInfo;
+    GetSystemInfo(&siSysInfo);
+    return siSysInfo.dwNumberOfProcessors;
+}
+#elif defined(__linux__)
+unsigned long get_processor_count(){
+    return sysconf(_SC_NPROCESSORS_ONLN);
+}
+#else
+unsigned long get_processor_count(){
+    return 1;
+}
+#endif
 
 static main_options config;
 
@@ -86,22 +105,29 @@ int main(int argc, char** argv) {
         exit(2);
     }
 
+
     connect_mongodb();
 
-    struct cmd_struct *cmd = NULL;
-    for (int i = 0; i < ARRAY_SIZE(commands) && optind < argc; i++) {
-        if (!strcmp(commands[i].cmd, argv[optind])) {
-            cmd = &commands[i];
+    ret = gpu_init(&config.gpu);
+
+    if (ret == 0){
+        struct cmd_struct *cmd = NULL;
+        for (int i = 0; i < ARRAY_SIZE(commands) && optind < argc; i++) {
+            if (!strcmp(commands[i].cmd, argv[optind])) {
+                cmd = &commands[i];
+            }
+        }
+        if (cmd) {
+            optind++;
+            ret = cmd->fn(argc, argv, &config);
+        }else {
+            fprintf (stderr,
+                     "Missing Command\n");
+            ret = 3;
         }
     }
-    if (cmd) {
-        optind++;
-        ret = cmd->fn(argc, argv, &config);
-    }else {
-        fprintf (stderr,
-                 "Missing Command\n");
-        ret = 3;
-    }
+
+    gpu_clear(&config.gpu);
 
     cleanup();
 
@@ -118,10 +144,12 @@ void connect_mongodb(){
     bson_error_t error;
 
     printf("initializing mongodb driver\n\n");
+    fflush(stdout);
 
     mongoc_init();
 
     printf("preparing mongo uri with %s\n",config.mongodb_uri);
+    fflush(stdout);
 
     uri = mongoc_uri_new_with_error (config.mongodb_uri, &error);
 
@@ -136,6 +164,7 @@ void connect_mongodb(){
 
 
     printf("creating mongodb connection pool\n");
+    fflush(stdout);
 
     pool = mongoc_client_pool_new (uri);
     if (!pool) {
@@ -152,6 +181,7 @@ void connect_mongodb(){
 
 
     printf("obtaining test mongodb client\n");
+    fflush(stdout);
 
     client = mongoc_client_pool_pop(pool);
 
@@ -164,6 +194,7 @@ void connect_mongodb(){
     }
 
     printf("\ntrying pinging mongodb\n");
+    fflush(stdout);
 
     command = BCON_NEW ("ping", BCON_INT32 (1));
 
@@ -179,6 +210,7 @@ void connect_mongodb(){
     printf ("mongodb ping returned: %s\n", str);
 
     printf("\nfetching target database\n");
+    fflush(stdout);
 
     database = mongoc_client_get_database (client, config.mongodb_database);
 
@@ -194,6 +226,7 @@ void connect_mongodb(){
     mongoc_database_destroy(database);
 
     printf("fetching config collection\n");
+    fflush(stdout);
 
     collection = mongoc_client_get_collection (client, config.mongodb_database, "config");
 
@@ -208,6 +241,7 @@ void connect_mongodb(){
     mongoc_collection_destroy(collection);
 
     printf("fetching pixels collection\n");
+    fflush(stdout);
 
     collection = mongoc_client_get_collection (client, config.mongodb_database, "pixels");
 
@@ -222,6 +256,7 @@ void connect_mongodb(){
     mongoc_collection_destroy(collection);
 
     printf("fetching rows collection\n");
+    fflush(stdout);
 
     collection = mongoc_client_get_collection (client, config.mongodb_database, "rows");
 
@@ -236,6 +271,7 @@ void connect_mongodb(){
     mongoc_collection_destroy(collection);
 
     printf("fetching maps collection\n");
+    fflush(stdout);
 
     collection = mongoc_client_get_collection (client, config.mongodb_database, "maps");
 
@@ -251,6 +287,7 @@ void connect_mongodb(){
 
     printf("mongodb structure is valid!\n");
     printf("\ncleaning up test client\n");
+    fflush(stdout);
 
     mongoc_client_pool_push(pool, client);
 
@@ -259,6 +296,7 @@ void connect_mongodb(){
     bson_free (str);
 
     printf("\nmongodb init done!\n\n");
+    fflush(stdout);
 
 }
 
