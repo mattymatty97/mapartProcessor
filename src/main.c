@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
 
     connect_mongodb();
 
-    ret = gpu_init(&config.gpu);
+    ret = gpu_init(&config, &config.gpu);
 
     if (ret == 0){
         struct cmd_struct *cmd = NULL;

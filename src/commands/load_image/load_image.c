@@ -1,6 +1,5 @@
 #include <unistd.h>
 #include <getopt.h>
-#include <pthread.h>
 #include <math.h>
 #include <libgen.h>
 
@@ -12,7 +11,11 @@
 #define PALETTE_SIZE 62
 #define RGB_SIZE 3
 #define RGBA_SIZE 4
+#ifdef MAPART_SURVIVAL
+#define MULTIPLIER_SIZE 3
+#else
 #define MULTIPLIER_SIZE 4
+#endif
 
 typedef struct {
     char *image_filename;
@@ -44,12 +47,19 @@ typedef struct {
 typedef enum {
   RGB,
   Lab,
-  Lhc
+  Lch
 } image_colorspace;
 
 typedef enum {
   none,
-  Floyd_Steinberg
+  Floyd_Steinberg,
+  JJND,
+  Stucki,
+  Atkinson,
+  Burkes,
+  Sierra,
+  Sierra2,
+  SierraL
 } dither_algorithm;
 
 void stbi_image_cleanup(image_data *image);
@@ -141,8 +151,8 @@ int load_image_command(int argc, char **argv, main_options *config) {
         colorspace = RGB;
     }else if (strcmp(local_config.color_space, "lab") == 0){
         colorspace = Lab;
-    }else if (strcmp(local_config.color_space, "lhc") == 0 ){
-        colorspace = Lhc;
+    }else if (strcmp(local_config.color_space, "lch") == 0 ){
+        colorspace = Lch;
     }else{
         fprintf(stderr,"Not a valid colorspace %s", local_config.color_space);
         ret = 45;
@@ -151,7 +161,23 @@ int load_image_command(int argc, char **argv, main_options *config) {
     if (ret == 0){
         if (strcmp(local_config.dithering, "none") == 0){
              dither = none;
-        }else{
+        }else if ( ( strcmp(local_config.dithering, "floyd") == 0 ) || ( strcmp(local_config.dithering, "floyd_steinberg") == 0 ) ){
+            dither = Floyd_Steinberg;
+        } else if ( ( strcmp(local_config.dithering, "jjnd") == 0 ) ){
+            dither = JJND;
+        } else if ( ( strcmp(local_config.dithering, "stucki") == 0 ) ){
+            dither = JJND;
+        } else if ( ( strcmp(local_config.dithering, "atkinson") == 0 ) ){
+            dither = Atkinson;
+        } else if ( ( strcmp(local_config.dithering, "burkes") == 0 ) ){
+            dither = Burkes;
+        } else if ( ( strcmp(local_config.dithering, "sierra") == 0 ) ){
+            dither = Sierra;
+        } else if ( ( strcmp(local_config.dithering, "sierra2") == 0 ) ){
+            dither = Sierra2;
+        } else if ( ( strcmp(local_config.dithering, "sierraL") == 0 ) ){
+            dither = SierraL;
+        } else {
             fprintf(stderr,"Not a valid dither algorithm %s", local_config.dithering);
             ret = 46;
         }
@@ -195,11 +221,15 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
             float* xyz_data = calloc( image.x * image.y * image.channels, sizeof (float));
 
+            fprintf(stdout,"Converting image to XYZ\n");
+            fflush(stdout);
             ret = gpu_rgb_to_xyz(&config->gpu, int_image->image_data, xyz_data, image.x, image.y, image.channels);
 
-            if (ret == 0)
+            if (ret == 0) {
+                fprintf(stdout,"Converting image to CIE-L*ab\n");
+                fflush(stdout);
                 ret = gpu_xyz_to_lab(&config->gpu, xyz_data, Lab_image->image_data, image.x, image.y, image.channels);
-
+            }
             free(xyz_data);
 
             image_int_cleanup(&int_image);
@@ -212,19 +242,23 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
 
                 float * palette_xyz_data = calloc( PALETTE_SIZE * MULTIPLIER_SIZE * RGBA_SIZE, sizeof (float));
-
+                fprintf(stdout,"Converting palette to XYZ\n");
+                fflush(stdout);
                 ret = gpu_rgb_to_xyz(&config->gpu, &palette.palette[0][0][0], palette_xyz_data, MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
 
-                if (ret == 0)
-                    ret = gpu_xyz_to_lab(&config->gpu, palette_xyz_data, &Lab_palette->palette[0][0][0], MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
-
+                if (ret == 0) {
+                    fprintf(stdout,"Converting palette to CIE-L*ab\n");
+                    fflush(stdout);
+                    ret = gpu_xyz_to_lab(&config->gpu, palette_xyz_data, &Lab_palette->palette[0][0][0],
+                                         MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
+                }
                 free(palette_xyz_data);
 
                 processed_palette = Lab_palette;
             }
 
 
-            if (ret == 0 && colorspace == Lhc){
+            if (ret == 0 && colorspace == Lch){
                 //convert to lhc
 
                 image_int_data *Lhc_image = calloc(1, sizeof (image_int_data));
@@ -233,7 +267,10 @@ int load_image_command(int argc, char **argv, main_options *config) {
                 Lhc_image->y = image.y;
                 Lhc_image->channels = image.channels;
 
-                ret = gpu_lab_to_lhc(&config->gpu, Lab_image->image_data, Lhc_image->image_data, image.x, image.y, image.channels);
+                fprintf(stdout,"Converting image to CIE-L*hc\n");
+                fflush(stdout);
+                ret = gpu_lab_to_lch(&config->gpu, Lab_image->image_data, Lhc_image->image_data, image.x, image.y,
+                                     image.channels);
 
                 if (ret == 0){
                     image_int_cleanup(&processed_image);
@@ -244,7 +281,10 @@ int load_image_command(int argc, char **argv, main_options *config) {
                     mapart_palette *Lhc_palette = calloc(1, sizeof (mapart_palette));
                     Lhc_palette->palette_name = palette.palette_name;
 
-                    ret = gpu_lab_to_lhc(&config->gpu, &processed_palette->palette[0][0][0], &Lhc_palette->palette[0][0][0], MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
+                    fprintf(stdout,"Converting palette to CIE-L*hc\n");
+                    fflush(stdout);
+                    ret = gpu_lab_to_lch(&config->gpu, &processed_palette->palette[0][0][0],
+                                         &Lhc_palette->palette[0][0][0], MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
 
                     if (ret == 0){
                         palette_cleanup(&processed_palette);
@@ -258,9 +298,35 @@ int load_image_command(int argc, char **argv, main_options *config) {
     unsigned char* dithered_image = NULL;
     //do dithering
     if (ret == 0){
+        fprintf(stdout,"Do image dithering\n");
+        fflush(stdout);
         if (dither == none){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
             ret = gpu_dither_none(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Floyd_Steinberg){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_floyd_steinberg(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == JJND){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_JJND(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Stucki){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_Stucki(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Atkinson){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_Atkinson(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Burkes){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_Burkes(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Sierra){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_Sierra(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == Sierra2){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_Sierra2(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+        } else if (dither == SierraL){
+            dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
+            ret = gpu_dither_SierraL(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
         }
     }
 
@@ -271,16 +337,22 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
         converted_image.image_data = calloc(image.x * image.y * 4,sizeof(unsigned char));
 
+        fprintf(stdout,"Convert dithered image back to rgb\n");
+        fflush(stdout);
         ret = gpu_palette_to_rgb(&config->gpu, dithered_image, &palette.palette[0][0][0], converted_image.image_data, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE);
 
         if (ret == 0) {
             char filename[1000] = {};
             sprintf(filename, "%s_%s_%s.png", config->project_name, local_config.color_space, local_config.dithering);
+            fprintf(stdout,"Save image\n");
+            fflush(stdout);
             ret = stbi_write_png(filename, converted_image.x, converted_image.y, converted_image.channels, converted_image.image_data, 0);
             if (ret == 0){
                 fprintf(stderr, "Failed to save image %s:\n%s\n", filename, stbi_failure_reason());
                 ret = 13;
             }else{
+                fprintf(stdout,"Image saved: %s\n", filename);
+                fflush(stdout);
                 ret = 0;
             }
         }

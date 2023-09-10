@@ -3,7 +3,8 @@
 
 #include <mongoc/mongoc.h>
 #include <stdatomic.h>
-#include <pthread.h>
+
+#define GPU_CODE_NO_RECURSION
 #include "../opencl/gpu.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
@@ -24,12 +25,14 @@ typedef struct  {
     _Atomic unsigned long count;
 } main_options;
 
+/*
 typedef struct {
     pthread_t thread_id;
     _Atomic unsigned long *count;
     _Atomic bool stopped;
     unsigned long total;
 } logger_t;
+*/
 
 void * logger_worker(void *);
 
