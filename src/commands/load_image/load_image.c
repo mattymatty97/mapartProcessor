@@ -1,7 +1,6 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
-#include <libgen.h>
 
 #include "../../libs/images/stb_image.h"
 #include "../../libs/images/stb_image_write.h"
@@ -11,15 +10,20 @@
 #define PALETTE_SIZE 62
 #define RGB_SIZE 3
 #define RGBA_SIZE 4
+
 #ifdef MAPART_SURVIVAL
 #define MULTIPLIER_SIZE 3
+#define BUILD_LIMIT 258
 #else
 #define MULTIPLIER_SIZE 4
+#define BUILD_LIMIT 2000
 #endif
+
 
 typedef struct {
     char *image_filename;
     char *palette_name;
+    unsigned int random_seed;
     char *dithering;
 } command_options;
 
@@ -39,11 +43,11 @@ typedef struct {
 } image_int_data;
 
 typedef struct {
-    double *image_data;
+    float *image_data;
     int x;
     int y;
     int channels;
-} image_double_data;
+} image_float_data;
 
 typedef struct {
     char * palette_name;
@@ -52,8 +56,8 @@ typedef struct {
 
 typedef struct {
     char * palette_name;
-    double palette[PALETTE_SIZE][MULTIPLIER_SIZE][RGBA_SIZE];
-} mapart_double_palette;
+    float palette[PALETTE_SIZE][MULTIPLIER_SIZE][RGBA_SIZE];
+} mapart_float_palette;
 
 
 typedef enum {
@@ -72,6 +76,8 @@ void stbi_image_cleanup(image_data *image);
 
 void image_int_cleanup(image_int_data ** image);
 void palette_cleanup(mapart_palette ** palette);
+void image_float_cleanup(image_float_data ** image);
+void float_palette_cleanup(mapart_float_palette ** palette);
 
 int load_image(command_options *options, image_data *image);
 
@@ -79,21 +85,35 @@ int get_palette(main_options *config, command_options *local_config, mapart_pale
 
 //-------------IMPLEMENTATIONS---------------------
 
+unsigned int str_hash(const char* word)
+{
+    unsigned int hash = 0;
+    for (int i = 0 ; word[i] != '\0' ; i++)
+    {
+        hash = 31*hash + word[i];
+    }
+    return hash;
+}
+
 int load_image_command(int argc, char **argv, main_options *config) {
     command_options local_config = {};
+    local_config.random_seed = str_hash("seed string");
+
     int ret = 0;
 
     printf("\nLoad command start\n\n");
     static struct option long_options[] = {
             {"image",       required_argument, 0, 'i'},
             {"palette",     required_argument, 0, 'p'},
+            {"random",     required_argument, 0, 'r'},
+            {"random-seed",     required_argument, 0, 'r'},
             {"dithering",   required_argument, 0, 'd'}
     };
 
     int c;
     opterr = 0;
     int option_index = 0;
-    while ((c = getopt_long(argc, argv, "+:i:p:d:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "+:i:p:d:r:", long_options, &option_index)) != -1) {
         switch (c) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
@@ -117,6 +137,10 @@ int load_image_command(int argc, char **argv, main_options *config) {
                 local_config.dithering = strdup(optarg);
                 break;
 
+            case 'r':
+                local_config.random_seed = str_hash(optarg);
+                break;
+
             case ':':
                 printf("option needs a value\n");
                 exit(1);
@@ -136,14 +160,14 @@ int load_image_command(int argc, char **argv, main_options *config) {
     image_data image = {};
 
     image_int_data *int_image = calloc( 1, sizeof (image_int_data ));
-    image_double_data *double_image = calloc( 1, sizeof (image_double_data ));
+    image_float_data *float_image = calloc( 1, sizeof (image_float_data ));
 
     dither_algorithm dither = none;
 
     mapart_palette palette = {};
 
-    image_double_data *processed_image = NULL;
-    mapart_double_palette *processed_palette = NULL;
+    image_float_data *processed_image = NULL;
+    mapart_float_palette *processed_palette = NULL;
 
     if (ret == 0){
         if (strcmp(local_config.dithering, "none") == 0){
@@ -186,18 +210,18 @@ int load_image_command(int argc, char **argv, main_options *config) {
             int_image->image_data[i] = image.image_data[i];
         }
 
-        //convert to double array for GPU compatibility
-        double_image->image_data = calloc(image.x * image.y * image.channels, sizeof (double));
-        double_image->x = image.x;
-        double_image->y = image.y;
-        double_image->channels = image.channels;
+        //convert to float array for GPU compatibility
+        float_image->image_data = calloc(image.x * image.y * image.channels, sizeof (float));
+        float_image->x = image.x;
+        float_image->y = image.y;
+        float_image->channels = image.channels;
 
         for (int i =0 ; i< (image.x * image.y * image.channels); i++){
             int_image->image_data[i] = image.image_data[i];
         }
 
         for (int i =0 ; i< (image.x * image.y * image.channels); i++){
-            double_image->image_data[i] = image.image_data[i];
+            float_image->image_data[i] = image.image_data[i];
         }
 
         //load image palette
@@ -209,22 +233,22 @@ int load_image_command(int argc, char **argv, main_options *config) {
     if (ret == 0){
         //do color conversions
         //convert image to CIE-L*ab values + alpha
-        image_double_data *Lab_image = calloc(1, sizeof (image_double_data));
-        Lab_image->image_data = calloc( image.x * image.y * image.channels, sizeof (double));
+        image_float_data *Lab_image = calloc(1, sizeof (image_float_data));
+        Lab_image->image_data = calloc( image.x * image.y * image.channels, sizeof (float));
         Lab_image->x = image.x;
         Lab_image->y = image.y;
         Lab_image->channels = image.channels;
 
-        double* xyz_data = calloc( image.x * image.y * image.channels, sizeof (double));
+        float* xyz_data = calloc( image.x * image.y * image.channels, sizeof (float));
 
         fprintf(stdout,"Converting image to XYZ\n");
         fflush(stdout);
-        ret = gpu_rgb_to_xyz(&config->gpu, int_image->image_data, xyz_data, image.x, image.y, image.channels);
+        ret = gpu_rgb_to_xyz(&config->gpu, int_image->image_data, xyz_data, image.x, image.y);
 
         if (ret == 0) {
             fprintf(stdout,"Converting image to CIE-L*ab\n");
             fflush(stdout);
-            ret = gpu_xyz_to_lab(&config->gpu, xyz_data, Lab_image->image_data, image.x, image.y, image.channels);
+            ret = gpu_xyz_to_lab(&config->gpu, xyz_data, Lab_image->image_data, image.x, image.y);
         }
         free(xyz_data);
 
@@ -233,20 +257,20 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
         //convert palette to CIE-L*ab + alpha
         if (ret == 0){
-            mapart_double_palette *Lab_palette = calloc( 1,sizeof (mapart_double_palette));
+            mapart_float_palette *Lab_palette = calloc( 1,sizeof (mapart_float_palette));
             Lab_palette->palette_name = palette.palette_name;
 
 
-            double * palette_xyz_data = calloc( PALETTE_SIZE * MULTIPLIER_SIZE * RGBA_SIZE, sizeof (double));
+            float * palette_xyz_data = calloc( PALETTE_SIZE * MULTIPLIER_SIZE * RGBA_SIZE, sizeof (float));
             fprintf(stdout,"Converting palette to XYZ\n");
             fflush(stdout);
-            ret = gpu_rgb_to_xyz(&config->gpu, &palette.palette[0][0][0], palette_xyz_data, MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
+            ret = gpu_rgb_to_xyz(&config->gpu, &palette.palette[0][0][0], palette_xyz_data, MULTIPLIER_SIZE, PALETTE_SIZE);
 
             if (ret == 0) {
                 fprintf(stdout,"Converting palette to CIE-L*ab\n");
                 fflush(stdout);
                 ret = gpu_xyz_to_lab(&config->gpu, palette_xyz_data, &Lab_palette->palette[0][0][0],
-                                     MULTIPLIER_SIZE, PALETTE_SIZE, RGBA_SIZE);
+                                     MULTIPLIER_SIZE, PALETTE_SIZE);
             }
             free(palette_xyz_data);
 
@@ -256,36 +280,47 @@ int load_image_command(int argc, char **argv, main_options *config) {
     unsigned char* dithered_image = NULL;
     //do dithering
     if (ret == 0){
+        fprintf(stdout,"Generate noise image\n");
+        fflush(stdout);
+        float *noise = calloc( image.x * image.y, sizeof (float));
+
+        srand(local_config.random_seed);
+
+        for (int i = 0; i < image.x * image.y; i++)
+            noise[i] = (float)rand()/(float)RAND_MAX;
+            //noise[i] = 1;
+
         fprintf(stdout,"Do image dithering\n");
         fflush(stdout);
         if (dither == none){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_none(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_none(&config->gpu, processed_image->image_data,  dithered_image, &processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Floyd_Steinberg){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_floyd_steinberg(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_floyd_steinberg(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == JJND){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_JJND(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_JJND(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Stucki){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Stucki(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_Stucki(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Atkinson){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Atkinson(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_Atkinson(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Burkes){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Burkes(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_Burkes(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Sierra){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Sierra(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_Sierra(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == Sierra2){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Sierra2(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_Sierra2(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         } else if (dither == SierraL){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_SierraL(&config->gpu, processed_image->image_data, &processed_palette->palette[0][0][0], dithered_image, image.x, image.y, image.channels,PALETTE_SIZE, MULTIPLIER_SIZE);
+            ret = gpu_dither_SierraL(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
         }
+        free(noise);
     }
 
     //save result
@@ -301,7 +336,7 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
         if (ret == 0) {
             char filename[1000] = {};
-            sprintf(filename, "%s_%s.png", config->project_name, local_config.dithering);
+            sprintf(filename, "images/%s_%s.png", config->project_name, local_config.dithering);
             fprintf(stdout,"Save image\n");
             fflush(stdout);
             ret = stbi_write_png(filename, converted_image.x, converted_image.y, converted_image.channels, converted_image.image_data, 0);
@@ -320,9 +355,9 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
     if (dithered_image != NULL)
         free(dithered_image);
-    image_int_cleanup(&processed_image);
-    if (processed_palette != &palette)
-        palette_cleanup(&processed_palette);
+    image_float_cleanup(&processed_image);
+    if (processed_palette != NULL)
+        float_palette_cleanup(&processed_palette);
     stbi_image_cleanup(&image);
     return ret;
 }
@@ -452,7 +487,23 @@ void image_int_cleanup(image_int_data ** image){
     }
 }
 
+void image_float_cleanup(image_float_data ** image){
+    if (*image != NULL) {
+        if ((*image)->image_data != NULL)
+            free((*image)->image_data);
+        free (*image);
+        *image = NULL;
+    }
+}
+
+
 void palette_cleanup(mapart_palette ** palette){
+    if (*palette != NULL) {
+        free (*palette);
+        *palette = NULL;
+    }
+}
+void float_palette_cleanup(mapart_float_palette ** palette){
     if (*palette != NULL) {
         free (*palette);
         *palette = NULL;

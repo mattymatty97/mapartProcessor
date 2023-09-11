@@ -1,126 +1,111 @@
 
 //reference values for sRGB
-static const float reference_srgb[3] = {
+static const float4 reference_srgb_10 = {
     94.811f,
     100.000f,
-    107.304f
+    107.304f,
+    1.0f
 };
 
-static const float reference_ICC[3] = {
+static const float4 reference_ICC = {
     96.720f,
     100.000f,
-    81.427f
+    81.427f,
+    1.0f
 };
 
-static const float reference[3] = {
-    94.811f,
+static const float4 reference_srgb_2 = {
+    95.047f,
     100.000f,
-    107.304f
+    108.883f,
+    1.0f
 };
-__kernel void rgb_to_XYZ(__global const int *In, __global double *Out, const unsigned char channels) {
+
+static const float4 reference = reference_srgb_10;
+
+__kernel void rgb_to_XYZ(__global const int *In, __global float *Out) {
 
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
-    //save the pixel
-    int rgb[4];
-    rgb[0] = In[(i * channels)];
-    rgb[1] = In[(i * channels) + 1];
-    rgb[2] = In[(i * channels) + 2];
-    if (channels > 2)
-        rgb[3] = In[(i * channels) + 3];
+    //read the pixel
+    int4 rgb = vload4(i, In);
 
-
+    //printf("Pixel %d is [%d,%d,%d,%d]\n", i, rgb[0], rgb[1], rgb[2], rgb[3]);
     //convert to XYZ
-    double var[3];
+
+    float3 var = 0;
 
     for (int i=0; i<3; i++){
-        var[i] = (rgb[i] / 255.0);
+        var[i] = (float)rgb[i] / 255.0f;
 
         if ( var[i] > 0.04045 )
-            var[i] = pow((var[i] + 0.055) / 1.055, 2.4);
+            var[i] = pow((var[i] + 0.055f) / 1.055f, 2.4f);
         else
-            var[i] = var[i] / 12.92;
+            var[i] = var[i] / 12.92f;
 
-
-        var[i] = var[i] * 100;
+        var[i] = var[i] * 100.0f;
     }
 
+
+    //printf("var for Pixel %d is [%f,%f,%f,%f]\n", i, var[0], var[1], var[2], var[3]);
     //write results
 
-    Out[ i * channels]        = var[0] * 0.4124 + var[1] * 0.3576 + var[2] * 0.1805;
-    Out[ (i * channels ) + 1 ]= var[0] * 0.2126 + var[1] * 0.7152 + var[2] * 0.0722;
-    Out[ (i * channels ) + 2 ]= var[0] * 0.0193 + var[1] * 0.1192 + var[2] * 0.9505;
+    float4 XYZ = {
+        var[0] * 0.4124f + var[1] * 0.3576f + var[2] * 0.1805f,
+        var[0] * 0.2126f + var[1] * 0.7152f + var[2] * 0.0722f,
+        var[0] * 0.0193f + var[1] * 0.1192f + var[2] * 0.9505f,
+        rgb[3]
+    };
 
-    //keep alpha channel as original if any
-    if (channels > 2)
-        Out[ (i * channels ) + 3 ]= rgb[3];
+    //printf("Result Pixel %d is [%f,%f,%f,%f]\n", i, XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
+    vstore4(XYZ, i, Out);
 
-
-    //fill remaining channels if any
-    for (int j = 4; j < channels; j++){
-        Out[ (i * channels ) + j ]= 0;
-    }
 }
 
 
-__kernel void xyz_to_lab(__global const double *In, __global double *Out, const unsigned char channels) {
+__kernel void xyz_to_lab(__global const float *In, __global float *Out) {
 
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
-    //save the pixel
-    double XYZ[4];
-    XYZ[0] = In[(i * channels)];
-    XYZ[1] = In[(i * channels) + 1];
-    XYZ[2] = In[(i * channels) + 2];
-    if (channels > 2)
-        XYZ[3] = In[(i * channels) + 3];
+    //read the pixel
+    float4 XYZ = vload4(i, In);
 
-    double var[3] = {};
+    float4 var = 0;
 
     //printf("Pixel in [%f,%f,%f,%f]\n", XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
 
     //convert to L*ab
 
-    for (int i=0; i<3; i++){
-        var[i] = XYZ[i] / reference[i];
+    var = XYZ / reference;
 
+    for (int i=0; i<3; i++){
         if ( var[i] > 0.008856 )
-            var[i] = pow(var[i] , 1/3.0);
+            var[i] = pow(var[i] , 1/3.0f);
         else
-            var[i] = ( var[i] * 7.787) + (16 / 116.0);
+            var[i] = ( var[i] * 7.787f) + (16 / 116.0f);
     }
 
+    float4 Lab = {
+        (116 * var[1]) - 16,
+        500 * (var[0] - var[1]),
+        200 * (var[1] - var[2]),
+        XYZ[3]
+    };
+
+    Lab = max(min(Lab, (float4)(100,128,128,255)), (float4)(0,-128,-128,0));
 
     //wirte results
-    
-    Out[ (i * channels )]     = min(max((116 * var[1]) - 16, 0.0), 100.0);
-    Out[ (i * channels ) + 1 ]= min(max(500 * (var[0] - var[1]), -128.0), 128.0);
-    Out[ (i * channels ) + 2 ]= min(max(200 * (var[1] - var[2]), -128.0), 128.0);
-
-    //keep alpha channel as original if any
-    if (channels > 2)
-        Out[ (i * channels ) + 3 ]= XYZ[3];
-
-    //fill remaining channels if any
-    for (int j = 4; j < channels; j++){
-        Out[ (i * channels ) + j ]= 0;
-    }
+    vstore4(Lab, i, Out);
 }
 
-__kernel void lab_to_lch(__global const double *In, __global double *Out, const unsigned char channels) {
+__kernel void lab_to_lch(__global const float *In, __global float *Out) {
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
-    //save the pixel
-    int lab[4];
-    lab[0] = In[(i * channels)];
-    lab[1] = In[(i * channels) + 1];
-    lab[2] = In[(i * channels) + 2];
-    if (channels > 2)
-        lab[3] = In[(i * channels) +3];
-
+    //read the pixel
+    float4 lab = vload4(i, In);
 
     //convert to L*ch
 
@@ -135,17 +120,16 @@ __kernel void lab_to_lch(__global const double *In, __global double *Out, const 
 
     //wirte results
 
-    Out[ (i * channels )]     = min(max(lab[0],0), 100);
-    Out[ (i * channels ) + 1 ]= min(max((int)round(sqrt((float)(lab[1]*lab[1]) + (lab[2]*lab[2]))), 0), 100);
-    Out[ (i * channels ) + 2 ]= min(max((int)round(var), 0), 360 );
+    float4 Lch = {
+        lab[0],
+        sqrt((float)(lab[1]*lab[1]) + (lab[2]*lab[2])),
+        var,
+        lab[3]
+    };
 
-    //keep alpha channel as original if any
-    if (channels > 3)
-        Out[ (i * channels ) + 3 ]= lab[3];
+    
+    Lch = max(min(Lch, (float4)(100,100,360,255)), (float4)(0,0,0,0));
 
-    //fill remaining channels if any
-    for (int j = 4; j < channels; j++){
-        Out[ (i * channels ) + j ]= 0;
-    }
+    vstore4(Lch, i, Out);
 
 }
