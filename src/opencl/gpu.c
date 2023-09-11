@@ -349,7 +349,7 @@ cl_program gpu_compile_program(main_options *config, gpu_t * gpu_holder, char * 
     return NULL;
 }
 
-int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigned int y, unsigned char channels){
+int gpu_rgb_to_xyz(gpu_t *gpu, int *input, double *output, unsigned int x, unsigned int y, unsigned char channels){
     unsigned long buffer_size = x * y * channels;
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
@@ -364,7 +364,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigne
                                    buffer_size * sizeof(int), NULL, &ret);
     if (ret == 0)
          output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
-                                         buffer_size * sizeof(float), NULL, &ret);
+                                         buffer_size * sizeof(double), NULL, &ret);
 
     //copy input into the memory object
     if (ret == 0)
@@ -391,7 +391,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigne
 
     //read the results
     if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), output, 1 ,&event, &event);
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (double), output, 1 ,&event, &event);
 
     //wait for results
     if (ret == 0)
@@ -412,7 +412,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigne
     return ret;
 }
 
-int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigned int y, unsigned char channels){
+int gpu_xyz_to_lab(gpu_t *gpu, double *input, double *output, unsigned int x, unsigned int y, unsigned char channels){
     unsigned long buffer_size = x * y * channels;
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
@@ -424,14 +424,14 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigne
     //create memory objects
 
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                   buffer_size * sizeof(float), NULL, &ret);
+                                   buffer_size * sizeof(double), NULL, &ret);
     if (ret == 0)
          output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
-                                         buffer_size * sizeof(int), NULL, &ret);
+                                         buffer_size * sizeof(double), NULL, &ret);
 
     //copy input into the memory object
     if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), input, 0, NULL, NULL);
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (double), input, 0, NULL, NULL);
 
     //create kernel
     if (ret == 0)
@@ -454,7 +454,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigne
 
     //read the results
     if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), output, 1 ,&event, &event);
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (double), output, 1 ,&event, &event);
 
     //wait for results
     if (ret == 0)
@@ -475,70 +475,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, int*output, unsigned int x, unsigne
     return ret;
 }
 
-int gpu_lab_to_lch(gpu_t *gpu, int *input, int*output, unsigned int x, unsigned int y, unsigned char channels){
-    unsigned long buffer_size = x * y * channels;
-    cl_int ret = 0;
-    cl_mem input_mem_obj = NULL;
-    cl_mem output_mem_obj = NULL;
-    cl_kernel kernel = NULL;
-
-    cl_event event;
-
-    //create memory objects
-
-    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                   buffer_size * sizeof(int), NULL, &ret);
-    if (ret == 0)
-        output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
-                                        buffer_size * sizeof(int), NULL, &ret);
-
-    //copy input into the memory object
-    if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), input, 0, NULL, NULL);
-
-    //create kernel
-    if (ret == 0)
-        kernel = clCreateKernel(gpu->programs[0].program, "lab_to_lch", &ret);
-
-    //set kernel arguments
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&input_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&output_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, 2, sizeof(const unsigned char), (void *)&channels);
-
-    size_t global_item_size = x * y;
-    size_t local_item_size = MIN(y, gpu->max_parallelism);
-
-    //request the gpu process
-    if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, &event);
-
-    //read the results
-    if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), output, 1 ,&event, &event);
-
-    //wait for results
-    if (ret == 0)
-        ret = clWaitForEvents(1, &event);
-
-    //flush remaining tasks
-    if (ret == 0)
-        ret = clFlush(gpu->commandQueue);
-
-    if (kernel != NULL)
-        clReleaseKernel(kernel);
-
-    if (input_mem_obj != NULL)
-        clReleaseMemObject(input_mem_obj);
-    if (output_mem_obj != NULL)
-        clReleaseMemObject(output_mem_obj);
-
-    return ret;
-}
-
-int gpu_dither_none(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_none(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     unsigned long buffer_size = x * y * channels;
     unsigned long palette_size = palette_indexes * palette_variations * 4;
     unsigned long result_size = x * y * 2;
@@ -553,19 +490,19 @@ int gpu_dither_none(gpu_t *gpu, int *input, int*palette, unsigned char* result, 
     //create memory objects
 
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                   buffer_size * sizeof(int), NULL, &ret);
+                                   buffer_size * sizeof(double), NULL, &ret);
     if (ret == 0)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                         palette_size * sizeof(int), NULL, &ret);
+                                         palette_size * sizeof(double), NULL, &ret);
     if (ret == 0)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         result_size * sizeof(unsigned char), NULL, &ret);
 
     //copy input into the memory object
     if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), input, 0, NULL, NULL);
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (double), input, 0, NULL, NULL);
     if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (int), palette, 0, NULL, NULL);
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (double), palette, 0, NULL, NULL);
 
     //create kernel
     if (ret == 0)
@@ -616,7 +553,7 @@ int gpu_dither_none(gpu_t *gpu, int *input, int*palette, unsigned char* result, 
     return ret;
 }
 
-int _gpu_dither_error_bleed(gpu_t *gpu, cl_program program, char * kernel_func, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int _gpu_dither_error_bleed(gpu_t *gpu, cl_program program, char * kernel_func, double *input, double *palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     unsigned long buffer_size = x * y * channels;
     unsigned long palette_size = palette_indexes * palette_variations * 4;
     unsigned long result_size = x * y * 2;
@@ -638,16 +575,16 @@ int _gpu_dither_error_bleed(gpu_t *gpu, cl_program program, char * kernel_func, 
     //create memory objects
 
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                   buffer_size * sizeof(int), NULL, &ret);
+                                   buffer_size * sizeof(double), NULL, &ret);
     if (ret == 0)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
-                                         palette_size * sizeof(int), NULL, &ret);
+                                         palette_size * sizeof(double), NULL, &ret);
     if (ret == 0)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         result_size * sizeof(unsigned char), NULL, &ret);
     if (ret == 0)
         error_buf_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                           buffer_size * sizeof(int), NULL, &ret);
+                                           buffer_size * sizeof(double), NULL, &ret);
     if (ret == 0)
         workgroup_rider_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                  sizeof(unsigned int), NULL, &ret);
@@ -657,13 +594,13 @@ int _gpu_dither_error_bleed(gpu_t *gpu, cl_program program, char * kernel_func, 
 
     //copy input into the memory object
     if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (int), input, 0, NULL, &event);
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (double), input, 0, NULL, &event);
     if (ret == 0)
-        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (int), palette, 0, NULL, &event);
-    int pattern = 0;
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof (double), palette, 0, NULL, &event);
+    double pattern = 0;
 
     if (ret == 0)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (int), 0, palette_size * sizeof (int), 1, &event, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (double), 0, palette_size * sizeof (double), 1, &event, &event);
 
     //create kernel
     if (ret == 0)
@@ -730,35 +667,35 @@ int _gpu_dither_error_bleed(gpu_t *gpu, cl_program program, char * kernel_func, 
     return ret;
 }
 
-int gpu_dither_floyd_steinberg(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_floyd_steinberg(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[2].program, "Floyd_Steinberg", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_JJND(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_JJND(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[3].program, "JJND", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_Stucki(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_Stucki(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[4].program, "Stucki", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_Atkinson(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_Atkinson(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[5].program, "Atkinson", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_Burkes(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_Burkes(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[6].program, "Burkes", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_Sierra(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_Sierra(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[7].program, "Sierra", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_Sierra2(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_Sierra2(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[8].program, "SierraTwo", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 
-int gpu_dither_SierraL(gpu_t *gpu, int *input, int*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
+int gpu_dither_SierraL(gpu_t *gpu, double *input, double*palette, unsigned char* result, unsigned int x, unsigned int y, unsigned char channels, unsigned char palette_indexes, unsigned char palette_variations){
     return _gpu_dither_error_bleed(gpu, gpu->programs[9].program, "SierraL", input, palette, result, x, y, channels, palette_indexes, palette_variations);
 }
 

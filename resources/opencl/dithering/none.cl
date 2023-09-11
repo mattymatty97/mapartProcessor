@@ -1,11 +1,11 @@
 
-__kernel void no_dithering(__global const int *In, __global const int *Palette, __global unsigned char *Out,
+__kernel void no_dithering(__global const double *In, __global const double *Palette, __global unsigned char *Out,
                            const unsigned char channels, const unsigned char palette_indexes, const unsigned char palette_variations) {
 
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
-    int4 pixel;
+    double4 pixel;
     //save the pixel
     pixel[0] = In[(i * channels)];
     pixel[1] = In[(i * channels) + 1];
@@ -16,14 +16,14 @@ __kernel void no_dithering(__global const int *In, __global const int *Palette, 
         pixel[3] = 255;
     }
 
-    int4 min_d = 0;
-    int min_d2_sum = INT_MAX;
+    double4 min_d = 0;
+    double min_d2_sum = INT_MAX;
     unsigned char min_index = 0;
     unsigned char min_state = 0;
 
-    int4 tmp_d = 0;
-    int4 tmp_d2 = INT_MAX;
-    int tmp_d2_sum = INT_MAX;
+    double4 tmp_d = 0;
+    double4 tmp_d2 = INT_MAX;
+    double tmp_d2_sum = INT_MAX;
 
     //process inxed 0 separately
     //Transparency
@@ -34,9 +34,9 @@ __kernel void no_dithering(__global const int *In, __global const int *Palette, 
     for(unsigned char p = 1; p < palette_indexes; p++){
         for (unsigned char s = 0; s < palette_variations; s++){
             int palette_index = p * palette_variations + s;
-            int4 palette = vload4(palette_index, Palette);
+            double4 palette = vload4(palette_index, Palette);
 
-            tmp_d = palette - pixel;
+            tmp_d = pixel - palette;
             tmp_d2 = tmp_d * tmp_d;
             tmp_d2_sum = tmp_d2[0] + tmp_d2[1] + tmp_d2[2] + tmp_d2[3];
 

@@ -17,7 +17,7 @@ static const float reference[3] = {
     100.000f,
     107.304f
 };
-__kernel void rgb_to_XYZ(__global const int *In, __global float *Out, const unsigned char channels) {
+__kernel void rgb_to_XYZ(__global const int *In, __global double *Out, const unsigned char channels) {
 
     // Get the index of the current element to be processed
     int i = get_global_id(0);
@@ -32,21 +32,21 @@ __kernel void rgb_to_XYZ(__global const int *In, __global float *Out, const unsi
 
 
     //convert to XYZ
-    float var[3];
+    double var[3];
 
     for (int i=0; i<3; i++){
-        var[i] = (rgb[i] / 255.0f);
+        var[i] = (rgb[i] / 255.0);
 
-        if ( var[i] > 0.04045f )
-            var[i] = pow((var[i] + 0.055f) / 1.055f, 2.4f);
+        if ( var[i] > 0.04045 )
+            var[i] = pow((var[i] + 0.055) / 1.055, 2.4);
         else
-            var[i] = var[i] / 12.92f;
+            var[i] = var[i] / 12.92;
 
 
         var[i] = var[i] * 100;
     }
 
-    //wirte results
+    //write results
 
     Out[ i * channels]        = var[0] * 0.4124 + var[1] * 0.3576 + var[2] * 0.1805;
     Out[ (i * channels ) + 1 ]= var[0] * 0.2126 + var[1] * 0.7152 + var[2] * 0.0722;
@@ -64,20 +64,22 @@ __kernel void rgb_to_XYZ(__global const int *In, __global float *Out, const unsi
 }
 
 
-__kernel void xyz_to_lab(__global const float *In, __global int *Out, const unsigned char channels) {
+__kernel void xyz_to_lab(__global const double *In, __global double *Out, const unsigned char channels) {
 
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
     //save the pixel
-    float XYZ[4];
+    double XYZ[4];
     XYZ[0] = In[(i * channels)];
     XYZ[1] = In[(i * channels) + 1];
     XYZ[2] = In[(i * channels) + 2];
     if (channels > 2)
         XYZ[3] = In[(i * channels) + 3];
 
-    float var[3] = {};
+    double var[3] = {};
+
+    //printf("Pixel in [%f,%f,%f,%f]\n", XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
 
     //convert to L*ab
 
@@ -85,21 +87,21 @@ __kernel void xyz_to_lab(__global const float *In, __global int *Out, const unsi
         var[i] = XYZ[i] / reference[i];
 
         if ( var[i] > 0.008856 )
-            var[i] = pow(var[i] , 1/3.0f);
+            var[i] = pow(var[i] , 1/3.0);
         else
-            var[i] = ( var[i] * 7.787f) + (16 / 116.0f);
+            var[i] = ( var[i] * 7.787) + (16 / 116.0);
     }
 
 
     //wirte results
     
-    Out[ (i * channels )]     = min(max((int)round((116 * var[1]) - 16), 0), 100);
-    Out[ (i * channels ) + 1 ]= min(max((int)round(500 * (var[0] - var[1])), -128), 128);
-    Out[ (i * channels ) + 2 ]= min(max((int)round(200 * (var[1] - var[2])), -128), 128);
+    Out[ (i * channels )]     = min(max((116 * var[1]) - 16, 0.0), 100.0);
+    Out[ (i * channels ) + 1 ]= min(max(500 * (var[0] - var[1]), -128.0), 128.0);
+    Out[ (i * channels ) + 2 ]= min(max(200 * (var[1] - var[2]), -128.0), 128.0);
 
     //keep alpha channel as original if any
     if (channels > 2)
-        Out[ (i * channels ) + 3 ]= round(XYZ[3]);
+        Out[ (i * channels ) + 3 ]= XYZ[3];
 
     //fill remaining channels if any
     for (int j = 4; j < channels; j++){
@@ -107,7 +109,7 @@ __kernel void xyz_to_lab(__global const float *In, __global int *Out, const unsi
     }
 }
 
-__kernel void lab_to_lch(__global const int *In, __global int *Out, const unsigned char channels) {
+__kernel void lab_to_lch(__global const double *In, __global double *Out, const unsigned char channels) {
     // Get the index of the current element to be processed
     int i = get_global_id(0);
 
