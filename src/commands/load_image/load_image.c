@@ -148,9 +148,12 @@ int load_image_command(int argc, char **argv, main_options *config) {
                 local_config.random_seed = str_hash(optarg);
                 break;
 
-            case 'h':
-                local_config.maximum_height = atoi(optarg);
+            case 'h': {
+                unsigned int height = atoi(optarg);
+                if (height!= 1 && height != 2)
+                    local_config.maximum_height = height;
                 break;
+            }
 
             case 's':
                 local_config.saturation_modifier = atof(optarg);

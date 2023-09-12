@@ -34,27 +34,30 @@ __kernel void rgb_to_XYZ(__global const int *In, __global float *Out) {
     //printf("Pixel %d is [%d,%d,%d,%d]\n", i, rgb[0], rgb[1], rgb[2], rgb[3]);
     //convert to XYZ
 
-    float3 var = 0;
+    float4 var = 0;
 
-    for (int i=0; i<3; i++){
-        var[i] = (float)rgb[i] / 255.0f;
+    var = convert_float4(rgb) / 255.0f;
+    
+    /*for (int i=0; i<3; i++){
 
         if ( var[i] > 0.04045 )
             var[i] = pow((var[i] + 0.055f) / 1.055f, 2.4f);
         else
             var[i] = var[i] / 12.92f;
 
-        var[i] = var[i] * 100.0f;
-    }
+    }*/
 
+    var = pow(var, 2.19921875f);
+
+    var = var * 100.0f;
 
     //printf("var for Pixel %d is [%f,%f,%f,%f]\n", i, var[0], var[1], var[2], var[3]);
     //write results
 
     float4 XYZ = {
-        var[0] * 0.4124f + var[1] * 0.3576f + var[2] * 0.1805f,
-        var[0] * 0.2126f + var[1] * 0.7152f + var[2] * 0.0722f,
-        var[0] * 0.0193f + var[1] * 0.1192f + var[2] * 0.9505f,
+        var[0] * 0.412390799265959f + var[1] * 0.357584339383878f + var[2] * 0.180480788401834f,
+        var[0] * 0.212639005871510f + var[1] * 0.715168678767756f + var[2] * 0.072192315360734f,
+        var[0] * 0.019330818715592f + var[1] * 0.119194779794626f + var[2] * 0.950532152249661f,
         rgb[3]
     };
 
@@ -79,14 +82,14 @@ __kernel void xyz_to_lab(__global const float *In, __global float *Out) {
     //convert to L*ab
 
     var = XYZ / reference;
-
+    
     for (int i=0; i<3; i++){
         if ( var[i] > 0.008856 )
             var[i] = pow(var[i] , 1/3.0f);
         else
             var[i] = ( var[i] * 7.787f) + (16 / 116.0f);
     }
-
+    
     float4 Lab = {
         (116 * var[1]) - 16,
         500 * (var[0] - var[1]),
@@ -115,8 +118,6 @@ __kernel void lab_to_lch(__global const float *In, __global float *Out) {
         var = ( var / M_PI_F ) * 180.0f;
     else
          var = 360 - ( fabs(var) / M_PI_F ) * 180.0f;
-
-
 
     //wirte results
 

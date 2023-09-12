@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <sys/stat.h>
-#include <time.h>
 #include "gpu.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
