@@ -109,27 +109,49 @@ __kernel void lab_to_lch(__global const float *In, __global float *Out) {
 
     //convert to L*ch
 
-    float var = atan((float)lab[1]/lab[2]);
+    float var = atan2(lab[2],lab[1]);
 
     if ( var > 0 )
         var = ( var / M_PI_F ) * 180.0f;
     else
-         var = 360 - ( (- var) / M_PI_F ) * 180.0f;
+         var = 360 - ( fabs(var) / M_PI_F ) * 180.0f;
 
 
 
     //wirte results
 
-    float4 Lch = {
+    float4 lch = {
         lab[0],
-        sqrt((float)(lab[1]*lab[1]) + (lab[2]*lab[2])),
+        sqrt((lab[1]*lab[1]) + (lab[2]*lab[2])),
         var,
         lab[3]
     };
 
     
-    Lch = max(min(Lch, (float4)(100,100,360,255)), (float4)(0,0,0,0));
+    lch = max(min(lch, (float4)(100,100,360,255)), (float4)(0,0,0,0));
 
-    vstore4(Lch, i, Out);
+    vstore4(lch, i, Out);
+
+}
+
+
+__kernel void lch_to_lab(__global const float *In, __global float *Out) {
+    // Get the index of the current element to be processed
+    int i = get_global_id(0);
+
+    //read the pixel
+    float4 lch = vload4(i, In);
+
+    //convert to L*ab
+    float4 lab = {
+        lch[0],
+        cos(radians(lch[2])) * lch[1] ,
+        sin(radians(lch[2])) * lch[1] ,
+        lch[3]
+    };
+    
+    lab = max(min(lab, (float4)(100,128,128,255)), (float4)(0,-128,-128,0));
+
+    vstore4(lab, i, Out);
 
 }

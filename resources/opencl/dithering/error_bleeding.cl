@@ -19,14 +19,13 @@ __kernel void Error_bleed_dither_by_cols(
                   const uchar             bleeding_size,
                   const uchar             min_progress,
                   __local volatile int   *mc_y,
-                  const uint              max_mc_y)
+                  const int              max_mc_height)
 {
     __local volatile uint        workgroup_number;
 
       if (get_local_id(0) == 0)
       {
             workgroup_number        = atomic_inc(workgroup_rider);
-
         
             for (int i = 0; i < get_local_size(0); i++)
                 progress[i]        = 0;
@@ -39,9 +38,9 @@ __kernel void Error_bleed_dither_by_cols(
       barrier(CLK_LOCAL_MEM_FENCE);
 
 
-      int                x = (workgroup_number * get_local_size(0)) + get_local_id(0);
+      int x = (workgroup_number * get_local_size(0)) + get_local_id(0);
 
-  for (int y = 0; y < (height); y++)
+    for (int y = 0; y < (height); y++)
       {
           if (get_local_id(0) > 0)      
           {
@@ -62,8 +61,10 @@ __kernel void Error_bleed_dither_by_cols(
             float4 error = vload4(i, err_buf);
 
             //printf("Error at %d %d is [%f, %f, %f, %f]\n", x , y, error[0], error[1], error[2], error[3]);
+            float4 d_error = error * error;
 
-            pixel += error;
+            if(d_error[0] + d_error[1] + d_error[2] + d_error[3] < 500)
+                pixel += error;
 			
 			
 			pixel = max(min(pixel,(float4)(100.0, 128.0, 128.0, 255.0)),(float4)(0.0,-128.0,-128.0, 0.0));
@@ -83,20 +84,29 @@ __kernel void Error_bleed_dither_by_cols(
 
             bool blacklisted_states[4] = {};
 
+            if (max_mc_height == 0){
+                blacklisted_states[0] = true;
+                blacklisted_states[2] = true;
+            }
+
             int curr_mc_height = mc_y[get_local_id(0)];
             
             int tmp_mc_height = 0;
 
             uint abs_mc_height = abs(curr_mc_height);
 
-            uint reference = max_mc_y/2;
+            uint reference = max_mc_height/2;
             
             //randomly reset the height to spread out the errors
             float rand = noise[i];
-            if (rand > 0.9f){
+
+            float f_x = abs(curr_mc_height)/ (float)max_mc_height;
+            float compare = (pow((float)reference, f_x) - 1) / (reference - 1);
+            if (max_mc_height > 0 && rand < compare){
                 blacklisted_states[sign(curr_mc_height) + 1] = true;
-                if (rand > 0.99f)
+                if (rand < compare - 0.005f){
                     blacklisted_states[1] = true;
+                }
             }
             
             
@@ -124,7 +134,7 @@ __kernel void Error_bleed_dither_by_cols(
                         float4 palette = vload4(palette_index, Palette);
 
                         tmp_d = pixel - palette;
-                        tmp_d2 = tmp_d * tmp_d * (float4)((pixel[0]<10)?20:1,1,1,1);
+                        tmp_d2 = tmp_d * tmp_d * (float4)((pixel[0]<30)?10:1,1,1,1);
                         tmp_d2_sum = tmp_d2[0] + tmp_d2[1] + tmp_d2[2] + tmp_d2[3];
 
                         if (tmp_d2_sum < min_d2_sum){
@@ -137,8 +147,8 @@ __kernel void Error_bleed_dither_by_cols(
                     }
                 }
 
-                if (min_index != 0){
-                    char delta = min_state - 1;
+                char delta = min_state - 1;
+                if (max_mc_height > 0 && min_index != 0){
                     //if we're changing direction reset to 0
                     if ( sign(delta) == -sign(curr_mc_height) ){
                         tmp_mc_height = delta;
@@ -146,7 +156,7 @@ __kernel void Error_bleed_dither_by_cols(
                     }else
                         tmp_mc_height = curr_mc_height + delta;
                     
-                    valid = abs(tmp_mc_height) < max_mc_y;
+                    valid = abs(tmp_mc_height) < max_mc_height;
 
                     if (!valid){
                         blacklisted_states[min_state] = true;
@@ -157,7 +167,6 @@ __kernel void Error_bleed_dither_by_cols(
                 }else{
                     valid = true;
                 }
-
             }
 
             mc_y[get_local_id(0)] = tmp_mc_height;

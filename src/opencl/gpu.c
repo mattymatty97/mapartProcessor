@@ -3,13 +3,9 @@
 #include <time.h>
 #include "gpu.h"
 
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-#define OPENCL_BUILD 1
+#define OPENCL_BUILD 2
 
 cl_program gpu_compile_program(main_options *config, gpu_t * gpu_holder, char * filename, cl_int * ret);
 
@@ -190,32 +186,29 @@ cl_int gpu_write_program_source_to_mongo(main_options *config, char * program_na
     BSON_APPEND_UTF8(query, "name", program_name);
     BSON_APPEND_INT32(query, "build", OPENCL_BUILD);
 
-    //if everything is fine continue
-    if (ret == 0) {
-        //set flag entry in config
-        //or reset if already exists
+    //set flag entry in config
+    //or reset if already exists
 
-        //set as upsert
-        bson_t *param = BCON_NEW(
-                "upsert", BCON_BOOL(true)
-        );
+    //set as upsert
+    bson_t *param = BCON_NEW(
+            "upsert", BCON_BOOL(true)
+    );
 
-        //prepare upsert command
-        bson_t *upsert = BCON_NEW(
-                "$set", "{",
-                "source", BCON_CODE(program_source),
-                "}"
-        );
+    //prepare upsert command
+    bson_t *upsert = BCON_NEW(
+            "$set", "{",
+            "source", BCON_CODE(program_source),
+            "}"
+    );
 
-        if (!mongoc_collection_update_one(config_c, query, upsert, param, NULL, &error)) {
-            //TODO add error handling;
-            ret = 19;
-        }
-
-        bson_destroy(param);
-        bson_destroy(upsert);
-        bson_destroy(query);
+    if (!mongoc_collection_update_one(config_c, query, upsert, param, NULL, &error)) {
+        //TODO add error handling;
+        ret = 19;
     }
+
+    bson_destroy(param);
+    bson_destroy(upsert);
+    bson_destroy(query);
     mongoc_collection_destroy(config_c);
 
     mongoc_client_pool_push(config->mongo_session.pool, client);
@@ -388,7 +381,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
     return ret;
 }
 
-int gpu_xyz_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y){
+int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y){
     unsigned long buffer_size = x * y * 4;
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
@@ -411,7 +404,68 @@ int gpu_xyz_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
 
     //create kernel
     if (ret == 0)
-        kernel = clCreateKernel(gpu->programs[0].program, "xyz_to_lch", &ret);
+        kernel = clCreateKernel(gpu->programs[0].program, "lab_to_lch", &ret);
+
+    //set kernel arguments
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&input_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&output_mem_obj);
+
+    size_t global_item_size = x * y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
+
+    //request the gpu process
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, &event);
+
+    //read the outputs
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), output, 1 ,&event, &event);
+
+    //wait for outputs
+    if (ret == 0)
+        ret = clWaitForEvents(1, &event);
+
+    //flush remaining tasks
+    if (ret == 0)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (output_mem_obj != NULL)
+        clReleaseMemObject(output_mem_obj);
+
+    return ret;
+}
+
+int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y){
+    unsigned long buffer_size = x * y * 4;
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem output_mem_obj = NULL;
+    cl_kernel kernel = NULL;
+
+    cl_event event;
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                   buffer_size * sizeof(float), NULL, &ret);
+    if (ret == 0)
+         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
+                                         buffer_size * sizeof(float), NULL, &ret);
+
+    //copy input into the memory object
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), input, 0, NULL, NULL);
+
+    //create kernel
+    if (ret == 0)
+        kernel = clCreateKernel(gpu->programs[0].program, "lch_to_lab", &ret);
 
     //set kernel arguments
     if (ret == 0)
@@ -451,7 +505,7 @@ int gpu_xyz_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
 
 //Dithering
 
-int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char* output, float *palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int *bleeding_params, unsigned char bleeding_count, unsigned char min_required_pixels, unsigned int max_minecraft_y){
+int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char* output, float *palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int *bleeding_params, unsigned char bleeding_count, unsigned char min_required_pixels, int max_minecraft_y){
     unsigned long buffer_size = x * y * 4;
     unsigned long palette_size = palette_indexes * palette_variations * 4;
     unsigned long output_size = x * y * 2;
@@ -539,7 +593,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char* out
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_int) * global_workgroup_size, NULL);
     if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *)&max_minecraft_y);
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *)&max_minecraft_y);
 
     //request the gpu process
     if (ret == 0)
@@ -579,12 +633,12 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char* out
     return ret;
 }
 
-int gpu_dither_none(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_none(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes, palette_variations, NULL,
                                            0, 0, max_minecraft_y);
 }
 
-int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[4][4] = {
             {0, 1, 7, 16}, { 1, -1, 3, 16}, {1, 0, 5, 16}, {1,1, 1, 16}
     };
@@ -592,9 +646,9 @@ int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char* output, 
                                            (int *) bleeding_parameters, 4, 2, max_minecraft_y);
 }
 
-int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[12][4] = {
-                                                                                                                   {0, 1, 7, 48},{ 0, 2, 5, 48}, 
+                                                                                                                   {0, 1, 7, 48},{ 0, 2, 5, 48},
             {1, -2, 3, 48}, {1,-1, 5, 48}, {1,0, 7, 48}, {1,1, 5, 48}, {1,2, 3, 48},
             {2, -2, 1, 48}, {2,-1, 3, 48}, {2,0, 5, 48}, {2,1, 3, 48}, {2,2, 1, 48}
     };
@@ -602,7 +656,7 @@ int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char* output, float*palet
                                            (int *) bleeding_parameters, 12, 3, max_minecraft_y);
 }
 
-int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[12][4] = {
             {0, 1, 8, 42},{ 0, 2, 4, 42},
             {1, -2, 2, 42}, {1,-1, 4, 42}, {1,0, 8, 42}, {1,1, 4, 42}, {1,2, 2, 42},
@@ -612,7 +666,7 @@ int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char* output, float*pal
                                            (int *) bleeding_parameters, 12, 3, max_minecraft_y);
 }
 
-int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[6][4] = {
             {0, 1, 1, 8},{ 0, 2, 1, 8},
             {1,-1, 1, 8}, {1,0, 1, 8}, {1,1, 1, 8},
@@ -622,7 +676,7 @@ int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char* output, float*p
                                            (int *) bleeding_parameters, 6, 3, max_minecraft_y);
 }
 
-int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[7][4] = {
             {0, 1, 8, 32},{ 0, 2, 4, 32},
             {1, -2, 2, 32}, {1,-1, 4, 32}, {1,0, 8, 32}, {1,1, 4, 32}, {1,2, 2, 32}
@@ -631,7 +685,7 @@ int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char* output, float*pal
                                            (int *) bleeding_parameters, 7, 3, max_minecraft_y);
 }
 
-int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[10][4] = {
             {0, 1, 5, 32},{ 0, 2, 3, 32},
             {1, -2, 2, 32}, {1,-1, 4, 32}, {1,0, 5, 32}, {1,1, 4, 32}, {1,2, 2, 32},
@@ -641,7 +695,7 @@ int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char* output, float*pal
                                            (int *) bleeding_parameters, 10, 3, max_minecraft_y);
 }
 
-int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[7][4] = {
             {0, 1, 4, 16},{ 0, 2, 3, 16},
             {1, -2, 1, 16}, {1,-1, 2, 16}, {1,0, 3, 16}, {1,1, 2, 16}, {1,2, 1, 16}
@@ -650,7 +704,7 @@ int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char* output, float*pa
                                            (int *) bleeding_parameters, 7, 3, max_minecraft_y);
 }
 
-int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, unsigned int max_minecraft_y){
+int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char* output, float*palette, float *noise, unsigned int x, unsigned int y, unsigned char palette_indexes, unsigned char palette_variations, int max_minecraft_y){
     int bleeding_parameters[3][4] = {
             {0, 1, 2, 4},
              {1,-1, 1, 4}, {1,0, 1, 4}

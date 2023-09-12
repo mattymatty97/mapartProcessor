@@ -13,10 +13,10 @@
 
 #ifdef MAPART_SURVIVAL
 #define MULTIPLIER_SIZE 3
-#define BUILD_LIMIT 258
+#define BUILD_LIMIT -1
 #else
 #define MULTIPLIER_SIZE 4
-#define BUILD_LIMIT 2000
+#define BUILD_LIMIT -1
 #endif
 
 
@@ -24,6 +24,8 @@ typedef struct {
     char *image_filename;
     char *palette_name;
     unsigned int random_seed;
+    int maximum_height;
+    float saturation_modifier;
     char *dithering;
 } command_options;
 
@@ -98,6 +100,8 @@ unsigned int str_hash(const char* word)
 int load_image_command(int argc, char **argv, main_options *config) {
     command_options local_config = {};
     local_config.random_seed = str_hash("seed string");
+    local_config.maximum_height = BUILD_LIMIT;
+    local_config.saturation_modifier = 0.f;
 
     int ret = 0;
 
@@ -107,13 +111,16 @@ int load_image_command(int argc, char **argv, main_options *config) {
             {"palette",     required_argument, 0, 'p'},
             {"random",     required_argument, 0, 'r'},
             {"random-seed",     required_argument, 0, 'r'},
+            {"maximum-height",     required_argument, 0, 'h'},
+            {"saturation",     required_argument, 0, 's'},
+            {"saturation-modifier",     required_argument, 0, 's'},
             {"dithering",   required_argument, 0, 'd'}
     };
 
     int c;
     opterr = 0;
     int option_index = 0;
-    while ((c = getopt_long(argc, argv, "+:i:p:d:r:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "+:i:p:d:r:h:s:", long_options, &option_index)) != -1) {
         switch (c) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
@@ -139,6 +146,14 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
             case 'r':
                 local_config.random_seed = str_hash(optarg);
+                break;
+
+            case 'h':
+                local_config.maximum_height = atoi(optarg);
+                break;
+
+            case 's':
+                local_config.saturation_modifier = atof(optarg);
                 break;
 
             case ':':
@@ -231,7 +246,6 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
     //if we're still fine
     if (ret == 0){
-        //do color conversions
         //convert image to CIE-L*ab values + alpha
         image_float_data *Lab_image = calloc(1, sizeof (image_float_data));
         Lab_image->image_data = calloc( image.x * image.y * image.channels, sizeof (float));
@@ -277,6 +291,32 @@ int load_image_command(int argc, char **argv, main_options *config) {
             processed_palette = Lab_palette;
         }
     }
+
+
+    //change saturation
+    if (ret == 0 && local_config.saturation_modifier != 0){
+        //convert to lch
+        float* lch_data = calloc( processed_image->x * processed_image->y * processed_image->channels, sizeof (float));
+        fprintf(stdout,"Converting image to Lch\n");
+        fflush(stdout);
+
+        ret = gpu_lab_to_lch(&config->gpu, processed_image->image_data, lch_data, image.x, image.y);
+
+        if (ret == 0){
+            fprintf(stdout,"changing saturation value by %f\n", local_config.saturation_modifier);
+            fflush(stdout);
+
+            for (int i = 0; i < processed_image->x * processed_image->y; i++){
+                lch_data[(i * processed_image->channels) + 1] = MIN(MAX(lch_data[(i * processed_image->channels) + 1] + local_config.saturation_modifier, 0), 100);
+            }
+
+            fprintf(stdout,"Converting image back to Lab\n");
+            fflush(stdout);
+            ret = gpu_lch_to_lab(&config->gpu, lch_data, processed_image->image_data, image.x, image.y);
+        }
+        free(lch_data);
+    }
+
     unsigned char* dithered_image = NULL;
     //do dithering
     if (ret == 0){
@@ -294,31 +334,31 @@ int load_image_command(int argc, char **argv, main_options *config) {
         fflush(stdout);
         if (dither == none){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_none(&config->gpu, processed_image->image_data,  dithered_image, &processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_none(&config->gpu, processed_image->image_data,  dithered_image, &processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Floyd_Steinberg){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_floyd_steinberg(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_floyd_steinberg(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == JJND){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_JJND(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_JJND(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Stucki){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Stucki(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_Stucki(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Atkinson){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Atkinson(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_Atkinson(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Burkes){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Burkes(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_Burkes(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Sierra){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Sierra(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_Sierra(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == Sierra2){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_Sierra2(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_Sierra2(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         } else if (dither == SierraL){
             dithered_image = calloc(image.x * image.y * 2,sizeof (unsigned char));
-            ret = gpu_dither_SierraL(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, BUILD_LIMIT);
+            ret = gpu_dither_SierraL(&config->gpu, processed_image->image_data, dithered_image,&processed_palette->palette[0][0][0], noise, image.x, image.y,PALETTE_SIZE, MULTIPLIER_SIZE, local_config.maximum_height);
         }
         free(noise);
     }
@@ -336,7 +376,22 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
         if (ret == 0) {
             char filename[1000] = {};
-            sprintf(filename, "images/%s_%s.png", config->project_name, local_config.dithering);
+            char * appendix = "";
+
+            if (local_config.maximum_height == 0)
+                appendix = strdup("_flat");
+            else if (local_config.maximum_height < 0)
+                appendix = strdup("_unlimited");
+            else{
+                char smallbuff[20] = {};
+                sprintf(smallbuff, "_%d", local_config.maximum_height);
+                appendix = strdup(smallbuff);
+            }
+
+            sprintf(filename, "images/%s_%s%s.png", config->project_name, local_config.dithering, appendix);
+
+            free(appendix);
+
             fprintf(stdout,"Save image\n");
             fflush(stdout);
             ret = stbi_write_png(filename, converted_image.x, converted_image.y, converted_image.channels, converted_image.image_data, 0);
