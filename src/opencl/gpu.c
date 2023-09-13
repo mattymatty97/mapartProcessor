@@ -4,7 +4,7 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-#define OPENCL_BUILD 2
+#define OPENCL_BUILD 3
 
 cl_program gpu_compile_program(main_options *config, gpu_t * gpu_holder, char * filename, cl_int * ret);
 
@@ -343,6 +343,67 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
     //create kernel
     if (ret == 0)
         kernel = clCreateKernel(gpu->programs[0].program, "xyz_to_lab", &ret);
+
+    //set kernel arguments
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void*)&input_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void*)&output_mem_obj);
+
+    size_t global_item_size = x * y;
+    size_t local_item_size = MIN(y, gpu->max_parallelism);
+
+    //request the gpu process
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, &event);
+
+    //read the outputs
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), output, 1 ,&event, &event);
+
+    //wait for outputs
+    if (ret == 0)
+        ret = clWaitForEvents(1, &event);
+
+    //flush remaining tasks
+    if (ret == 0)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (output_mem_obj != NULL)
+        clReleaseMemObject(output_mem_obj);
+
+    return ret;
+}
+
+int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y){
+    unsigned long buffer_size = x * y * 4;
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem output_mem_obj = NULL;
+    cl_kernel kernel = NULL;
+
+    cl_event event;
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
+                                   buffer_size * sizeof(float), NULL, &ret);
+    if (ret == 0)
+         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
+                                         buffer_size * sizeof(float), NULL, &ret);
+
+    //copy input into the memory object
+    if (ret == 0)
+        ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof (float), input, 0, NULL, NULL);
+
+    //create kernel
+    if (ret == 0)
+        kernel = clCreateKernel(gpu->programs[0].program, "xyz_to_luv", &ret);
 
     //set kernel arguments
     if (ret == 0)

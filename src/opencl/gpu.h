@@ -32,6 +32,7 @@ void gpu_clear(gpu_t *);
 
 int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float*output, unsigned int x, unsigned int y);
 int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y);
+int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y);
 int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y);
 int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y);
 

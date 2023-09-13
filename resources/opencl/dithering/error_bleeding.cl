@@ -1,6 +1,48 @@
-char sign(int x) {
-    return (x > 0) - (x < 0);
+#define SIGN(x) (x > 0) - (x < 0)
+
+#define SQR(x) (x)*(x)
+
+float lab2Hue(float4 lab){
+    float bias = 0;
+         if (lab[1] >= 0 && lab[0] == 0 ) return 0;
+    else if (lab[1] <  0 && lab[0] == 0 ) return 180;
+    else if (lab[1] == 0 && lab[0] >  0 ) return 90;
+    else if (lab[1] == 0 && lab[0] <  0 ) return 270;
+    else if (lab[1] >  0 && lab[0] >  0 ) bias = 0;
+    else if (lab[1] <  0                ) bias = 180;
+    else if (lab[1] >  0 && lab[0] <  0 ) bias = 360;
+
+    return degrees(atan( lab[2] / lab[1] )) + bias;
 }
+
+#define WHT_L 1.8f
+
+#define WHT_C 1.0f
+
+float deltaCMC2(float4 lab1, float4 lab2){
+    float xC1 = sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
+    float xC2 = sqrt( SQR(lab2[1]) + SQR(lab2[2]) );
+    float xff = sqrt( pow(xC1, 4) / ( pow(xC1, 4) + 1900) );
+    float xH1 = lab2Hue(lab1);
+
+    float xTT = 0;
+    if ( xH1 < 164 || xH1 > 345) xTT = 0.36f + fabs( 0.4f * cos( radians(  35.0f + xH1 ) ) );
+    else                         xTT = 0.56f + fabs( 0.2f * cos( radians( 168.0f + xH1 ) ) );
+
+    float xSL = 0;
+    if ( lab1[0] < 16) xSL = 0.511f;
+    else               xSL = ( 0.040975f * lab1[0] ) / ( 1 + ( 0.01765f * lab1[0] ) );
+
+    float xSC = ( ( 0.0638f * xC1 ) / ( 1 + ( 0.0131f * xC1 ) ) ) + 0.638f;
+    float xSH = ( ( xff * xTT ) + 1 - xff ) * xSC;
+    float xDH = sqrt( SQR( lab2[1] - lab1[1] ) + SQR( lab2[2] - lab1[2] ) - SQR( xC2 - xC1 ) );
+          xSL = ( lab2[0] - lab1[0] ) / ( WHT_L * xSL );
+          xSC = ( xC2 - xC1 ) / ( WHT_C * xSC );
+          xSH = xDH / xSH;
+    
+    return SQR(xSL) + SQR(xSC) + SQR(xSH) + SQR(lab2[3] - lab1[3]);
+}
+
 
 __kernel void Error_bleed_dither_by_cols(
                   __global float         *src,      
@@ -54,20 +96,21 @@ __kernel void Error_bleed_dither_by_cols(
 
         int i = (width * y) + x;
 
-        float4 pixel = vload4(i, src);
-        
+        float4 og_pixel = vload4(i, src);
+
         //printf("Pixel %d %d is [%f, %f, %f, %f]\n", x , y, pixel[0], pixel[1], pixel[2], pixel[3]);
 
         float4 error = vload4(i, err_buf);
 
         //printf("Error at %d %d is [%f, %f, %f, %f]\n", x , y, error[0], error[1], error[2], error[3]);
-        float4 d_error = error * error;
-
-        if(d_error[0] + d_error[1] + d_error[2] + d_error[3] < 500)
-            pixel += error;
         
+        float4 pixel = og_pixel + error;
         
+        //restrict in Lab colorspace
         pixel = max(min(pixel,(float4)(100.0, 128.0, 128.0, 255.0)),(float4)(0.0,-128.0,-128.0, 0.0));
+
+        //restrict in Luv colorspace
+        //pixel = max(min(pixel, (float4)(100,224,122,255)), (float4)(0,-134,-240,0));
 
         //printf("Pixel %d %d after error is [%f, %f, %f, %f]\n", x , y, pixel[0], pixel[1], pixel[2], pixel[3]);
 
@@ -103,7 +146,7 @@ __kernel void Error_bleed_dither_by_cols(
         float f_x = abs(curr_mc_height)/ (float)max_mc_height;
         float compare = (pow((float)reference, f_x) - 1) / (reference - 1);
         if (max_mc_height > 0 && rand < compare){
-            blacklisted_states[sign(curr_mc_height) + 1] = true;
+            blacklisted_states[SIGN(curr_mc_height) + 1] = true;
             if (rand < compare - 0.005f){
                 blacklisted_states[1] = true;
             }
@@ -122,7 +165,7 @@ __kernel void Error_bleed_dither_by_cols(
             tmp_d2_sum = FLT_MAX;
         
             min_d[3] = Palette[3] - pixel[3];
-            min_d2_sum = min_d[3] * min_d[3];
+            min_d2_sum = SQR(min_d[3]);
 
             for(unsigned char p = 1; p < palette_indexes; p++){
                 for (unsigned char s = 0; s < palette_variations; s++){
@@ -134,9 +177,7 @@ __kernel void Error_bleed_dither_by_cols(
 
                     tmp_d = pixel - palette;
 
-
-                    tmp_d2 = tmp_d * tmp_d;
-                    tmp_d2_sum = tmp_d2[0] + tmp_d2[1] + tmp_d2[2] + tmp_d2[3];
+                    tmp_d2_sum = deltaCMC2(pixel, palette);
 
                     if (tmp_d2_sum < min_d2_sum){
                         min_d2_sum = tmp_d2_sum;
@@ -151,7 +192,7 @@ __kernel void Error_bleed_dither_by_cols(
             char delta = min_state - 1;
             if (max_mc_height > 0 && min_index != 0){
                 //if we're changing direction reset to 0
-                if ( sign(delta) == -sign(curr_mc_height) ){
+                if ( SIGN(delta) == -SIGN(curr_mc_height) ){
                     tmp_mc_height = delta;
                     //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
                 }else
@@ -185,10 +226,16 @@ __kernel void Error_bleed_dither_by_cols(
             if (( x + param[0] ) >= 0 &&  ( x + param[0]) < width && ( y + param[1]) >= 0 && ( y + param[1]) < height){
                 error_index =  (width * ( y + param[1])) + x + param[0];
                 float4 spread_error = (min_d * param[2] / param[3]);
-                err_buf[(error_index * 4) + 0]  += spread_error[0];
-                err_buf[(error_index * 4) + 1]  += spread_error[1];
-                err_buf[(error_index * 4) + 2]  += spread_error[2];
-                err_buf[(error_index * 4) + 3]  += spread_error[3];
+                float4 dst_pixel = vload4(error_index, src);
+
+                tmp_d2_sum = deltaCMC2(pixel, dst_pixel);
+
+                if (tmp_d2_sum < 800){
+                    err_buf[(error_index * 4) + 0]  += spread_error[0];
+                    err_buf[(error_index * 4) + 1]  += spread_error[1];
+                    err_buf[(error_index * 4) + 2]  += spread_error[2];
+                    err_buf[(error_index * 4) + 3]  += spread_error[3];
+                }
             }
         }
 

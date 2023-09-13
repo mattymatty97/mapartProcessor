@@ -25,7 +25,6 @@ typedef struct {
     char *palette_name;
     unsigned int random_seed;
     int maximum_height;
-    float saturation_modifier;
     char *dithering;
 } command_options;
 
@@ -101,7 +100,6 @@ int load_image_command(int argc, char **argv, main_options *config) {
     command_options local_config = {};
     local_config.random_seed = str_hash("seed string");
     local_config.maximum_height = BUILD_LIMIT;
-    local_config.saturation_modifier = 0.f;
 
     int ret = 0;
 
@@ -112,15 +110,13 @@ int load_image_command(int argc, char **argv, main_options *config) {
             {"random",     required_argument, 0, 'r'},
             {"random-seed",     required_argument, 0, 'r'},
             {"maximum-height",     required_argument, 0, 'h'},
-            {"saturation",     required_argument, 0, 's'},
-            {"saturation-modifier",     required_argument, 0, 's'},
             {"dithering",   required_argument, 0, 'd'}
     };
 
     int c;
     opterr = 0;
     int option_index = 0;
-    while ((c = getopt_long(argc, argv, "+:i:p:d:r:h:s:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "+:i:p:d:r:h:", long_options, &option_index)) != -1) {
         switch (c) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
@@ -154,10 +150,6 @@ int load_image_command(int argc, char **argv, main_options *config) {
                     local_config.maximum_height = height;
                 break;
             }
-
-            case 's':
-                local_config.saturation_modifier = atof(optarg);
-                break;
 
             case ':':
                 printf("option needs a value\n");
@@ -293,31 +285,6 @@ int load_image_command(int argc, char **argv, main_options *config) {
 
             processed_palette = Lab_palette;
         }
-    }
-
-
-    //change saturation
-    if (ret == 0 && local_config.saturation_modifier != 0){
-        //convert to lch
-        float* lch_data = calloc( processed_image->x * processed_image->y * processed_image->channels, sizeof (float));
-        fprintf(stdout,"Converting image to Lch\n");
-        fflush(stdout);
-
-        ret = gpu_lab_to_lch(&config->gpu, processed_image->image_data, lch_data, image.x, image.y);
-
-        if (ret == 0){
-            fprintf(stdout,"changing saturation value by %f\n", local_config.saturation_modifier);
-            fflush(stdout);
-
-            for (int i = 0; i < processed_image->x * processed_image->y; i++){
-                lch_data[(i * processed_image->channels) + 1] = MIN(MAX(lch_data[(i * processed_image->channels) + 1] + local_config.saturation_modifier, 0), 100);
-            }
-
-            fprintf(stdout,"Converting image back to Lab\n");
-            fflush(stdout);
-            ret = gpu_lch_to_lab(&config->gpu, lch_data, processed_image->image_data, image.x, image.y);
-        }
-        free(lch_data);
     }
 
     unsigned char* dithered_image = NULL;
