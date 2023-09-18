@@ -88,7 +88,8 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
 // mapart methods
 
 int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *result, unsigned int x,
-                       unsigned int y, int max_minecraft_y);
+                          unsigned int y, int max_minecraft_y);
+
 #else
 #undef GPU_CODE_NO_RECURSION
 #endif

@@ -47,7 +47,7 @@ static struct option long_options[] = {
         {"dithering",      required_argument, 0, 'd'}
 };
 
-main_options config ={};
+main_options config = {};
 
 #define PALETTE_SIZE 62
 #define RGB_SIZE 3
@@ -142,10 +142,10 @@ int main(int argc, char **argv) {
 
     int c;
     opterr = 0;
-    
+
     config.threads = get_processor_count();
     unsigned long thread_count;
-    
+
     int option_index = 0;
     while ((c = getopt_long(argc, argv, "+:i:p:d:r:h:n:t:", long_options, &option_index)) != -1) {
         switch (c) {
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
                     printf(" with arg %s", optarg);
                 printf("\n");
                 break;
-                
+
             case 'n':
                 config.project_name = strdup(optarg);
                 break;
@@ -511,7 +511,7 @@ int get_palette(mapart_palette *palette) {
         bool eof = 0;
         bson_t doc = BSON_INITIALIZER;
         ret = bson_json_reader_read(reader, &doc, &error) <= 0;
-        if (ret != 0){
+        if (ret != 0) {
             fprintf(stderr, "Error reading bson: \n%s\n", error.message);
             ret = 2;
         }
@@ -563,7 +563,7 @@ int get_palette(mapart_palette *palette) {
             printf("Palette loaded\n\n");
         }
         bson_json_reader_destroy(reader);
-    }else{
+    } else {
         fprintf(stderr, "Error opening palette file %s:\n%s\n", config.palette_name, error.message);
         ret = 1;
     }

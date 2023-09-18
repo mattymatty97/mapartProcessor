@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include "logger.h"
 
-typedef struct node{
-    char * val;
-    struct node * next;
+typedef struct node {
+    char *val;
+    struct node *next;
 } node_t;
 
-char loglist_init(log_list_t * logList){
+char loglist_init(log_list_t *logList) {
     logList->head = NULL;
     logList->head = NULL;
     logList->mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -16,10 +16,10 @@ char loglist_init(log_list_t * logList){
 }
 
 
-char loglist_append(log_list_t * logList, char * logline){
+char loglist_append(log_list_t *logList, char *logline) {
     int ret = 0;
     pthread_mutex_lock(&logList->mutex);
-    if (logList->size<500) {
+    if (logList->size < 500) {
         node_t *node = calloc(1, sizeof(node_t));
         if (!node) {
             ret = 1;
@@ -41,11 +41,11 @@ char loglist_append(log_list_t * logList, char * logline){
     return ret;
 }
 
-char * loglist_pop(log_list_t * logList){
-    char* ret = NULL;
+char *loglist_pop(log_list_t *logList) {
+    char *ret = NULL;
     pthread_mutex_lock(&logList->mutex);
-    if (logList->head){
-        node_t * node = logList->head;
+    if (logList->head) {
+        node_t *node = logList->head;
         logList->head = node->next;
         if (!logList->head)
             logList->tail = NULL;
@@ -59,10 +59,10 @@ char * loglist_pop(log_list_t * logList){
 
 void *logger_worker(void *arg) {
     logger_t *worker_options = arg;
-    char * logline;
-    while (!(worker_options->stopped)){
-        while ((logline = loglist_pop(worker_options->logList)) != NULL){
-            fprintf(stdout,"%s\n", logline);
+    char *logline;
+    while (!(worker_options->stopped)) {
+        while ((logline = loglist_pop(worker_options->logList)) != NULL) {
+            fprintf(stdout, "%s\n", logline);
             free(logline);
         }
         fflush(stdout);

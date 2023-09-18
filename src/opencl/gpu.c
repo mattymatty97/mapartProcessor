@@ -3,8 +3,6 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-#define OPENCL_BUILD 4
-
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
 
 int gpu_init(main_options *config, gpu_t *gpu_holder) {
@@ -838,7 +836,7 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
 // mapart
 
 int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output, unsigned int x,
-                          unsigned int y, int max_minecraft_y){
+                          unsigned int y, int max_minecraft_y) {
     unsigned long buffer_size = x * y * 2;
     unsigned long output_size = buffer_size;
     //iterate vertically for mc compatibility
@@ -899,10 +897,10 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
         ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned char),
                                   &error_status, 1, &event, &event);
 
-        if (error_status > 0) {
-            fprintf(stderr, "Kernel returned error!\n");
-            ret = error_status;
-        }
+    if (error_status > 0) {
+        fprintf(stderr, "Kernel returned error!\n");
+        ret = error_status;
+    }
 
     if (ret == 0)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
