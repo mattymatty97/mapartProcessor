@@ -562,8 +562,6 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &min_required_pixels);
     if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_int) * global_workgroup_size, NULL);
-    if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
 
     //request the gpu process
@@ -864,8 +862,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
         workgroup_rider_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                  sizeof(unsigned int), NULL, &ret);
     if (ret == 0)
-        workgroup_rider_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                                 sizeof(unsigned char), NULL, &ret);
+        error_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                                 sizeof(unsigned int), NULL, &ret);
 
     //create kernel
     if (ret == 0)
@@ -891,10 +889,11 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
     if (ret == 0)
         ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
                                      0, NULL, &event);
-    unsigned char error_status = 0;
+
     //read the outputs
+    unsigned int error_status = 0;
     if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned char),
+        ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
                                   &error_status, 1, &event, &event);
 
     if (error_status > 0) {
@@ -903,7 +902,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
     }
 
     if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
+        ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned int),
                                   output, 1, &event, &event);
 
     if (ret == 0)

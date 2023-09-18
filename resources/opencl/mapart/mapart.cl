@@ -15,7 +15,7 @@ __kernel void palette_to_rgb(__global const unsigned char  *In, __global const i
 }
 
 
-#define SIGN(x) (x > 0) - (x < 0)
+#define SIGN(x) ((x > 0) - (x < 0))
 
 
 //kernel
@@ -24,7 +24,7 @@ __kernel void palette_to_height(
                   __global uchar         *src,      
                   __global uint          *dst,
                   __global uint          *workgroup_rider,
-                  __global uchar          *error,
+                  __global uint          *error,
                   const uint              width,
                   const uint              height,
                   const int               max_mc_height)
@@ -57,30 +57,54 @@ __kernel void palette_to_height(
         uchar2 og_pixel = vload2(i, src);
 
         char delta = og_pixel[1] - 1;
-        if (SIGN(direction) == -SIGN(delta)){
+        // 0 1 2
+        // -1 0 1
+        //printf("Pixel (%d,%d) delta is %d and sign is %d\n", x, y, delta, SIGN(delta));
+
+        if ( direction == -SIGN(delta) ){
             //staircase is changing direction
+            printf("Pixel (%d,%d) reset the staircase was %d blocks long\n", x, y, (y - start_index));
             start_index = y - 1;
             direction = SIGN(delta);
         }
 
-        long tmp_mc_height = mc_height + delta;
+        long tmp_mc_height = (long)mc_height + delta;
 
-        if (tmp_mc_height < 0 || tmp_mc_height > max_mc_height){
-            printf("Pixel (%d,%d) shifted %d blocks %s", x, y, (y - start_index), (delta < 0)?"Up":"Down");
+        if (tmp_mc_height < 0 || ( max_mc_height > 0 && tmp_mc_height > max_mc_height)){
+/*
+            if (delta < 0){
+                printf("Pixel (%d,%d) shifted %d blocks Up\n", x, y, (y - start_index));
+            }else{
+                printf("Pixel (%d,%d) shifted %d blocks Down\n", x, y, (y - start_index));
+            }
+*/
             for (uint tmp_y = start_index; tmp_y < y && atomic_add(error, 0) == 0; tmp_y++){
-                uint2 old_res = vload2(i ,dst);
-                long tmp = old_res[2] - delta;
-                if (tmp >= 0 && tmp < max_mc_height){
-                    uint2 new_res = (old_res[0], tmp);
-                    vstore2(new_res, i, dst);
+                
+                uint tmp_i = (width * tmp_y) + x;
+
+                uint2 old_res = vload2(tmp_i ,dst);
+
+                long tmp = old_res[1] - delta;
+                
+                if (tmp >= 0 && ( max_mc_height < 0 || tmp < max_mc_height)){
+
+                    uint2 new_res = (old_res[0], convert_uint_sat(tmp));
+
+                    vstore2(new_res, tmp_i, dst);
+
                 }else{
-                    printf("Error: Pixel (%d,%d) crashed a staircase y:%d", x, y, mc_height);
-                    atomic_add(error,1);
+
+                    printf("Error: Pixel (%d,%d) crashed a staircase y:%d\n", x, y, tmp);
+                    atomic_add(error, 1);
+
                 }
             }
-            mc_height -= delta;
+
             tmp_mc_height -= delta;
+
         }
+
+        mc_height = convert_uint_sat(tmp_mc_height);
 
         uint2 ret_pixel = (og_pixel[0], tmp_mc_height);
         vstore2(ret_pixel, i ,dst);

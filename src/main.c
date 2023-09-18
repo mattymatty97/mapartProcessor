@@ -64,26 +64,17 @@ main_options config = {};
 //----------------DEFINITIONS---------------
 
 typedef struct {
-    unsigned char *image_data;
+    void *image_data;
     int x;
     int y;
     int channels;
 } image_data;
 
+typedef image_data image_int_data;
 
-typedef struct {
-    int *image_data;
-    int x;
-    int y;
-    int channels;
-} image_int_data;
+typedef image_data image_uint_data;
 
-typedef struct {
-    float *image_data;
-    int x;
-    int y;
-    int channels;
-} image_float_data;
+typedef image_data image_float_data;
 
 typedef struct {
     char *palette_name;
@@ -108,13 +99,8 @@ typedef enum {
     SierraL
 } dither_algorithm;
 
-void image_cleanup(image_data *image);
-
-void image_int_cleanup(image_int_data **image);
-
-void palette_cleanup(mapart_palette **palette);
-
-void image_float_cleanup(image_float_data **image);
+void image_cleanup(void *image);
+void imagep_cleanup(void *image);
 
 void float_palette_cleanup(mapart_float_palette **palette);
 
@@ -261,7 +247,7 @@ int main(int argc, char **argv) {
         int_image->channels = image.channels;
 
         for (int i = 0; i < (image.x * image.y * image.channels); i++) {
-            int_image->image_data[i] = image.image_data[i];
+            ((int*)int_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
         //convert to float array for GPU compatibility
@@ -271,11 +257,11 @@ int main(int argc, char **argv) {
         float_image->channels = image.channels;
 
         for (int i = 0; i < (image.x * image.y * image.channels); i++) {
-            int_image->image_data[i] = image.image_data[i];
+            ((int*)int_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
         for (int i = 0; i < (image.x * image.y * image.channels); i++) {
-            float_image->image_data[i] = image.image_data[i];
+            ((float*)float_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
         //load image palette
@@ -305,7 +291,7 @@ int main(int argc, char **argv) {
         }
         free(xyz_data);
 
-        image_int_cleanup(&int_image);
+        imagep_cleanup(&int_image);
         processed_image = Lab_image;
 
         //convert palette to CIE-L*ab + alpha
@@ -405,9 +391,20 @@ int main(int argc, char **argv) {
     if (ret == 0) {
         ret = save_image(&palette, &dithered_image);
     }
-    image_float_cleanup(&processed_image);
+
+    //convert from palette to block and height
+    image_uint_data mapart_data = {calloc(image.x * image.y * 2, sizeof (unsigned int)), image.x, image.y, 2};
+    if (ret == 0) {
+        fprintf(stdout, "Convert from palette to BlockId and height\n");
+        fflush(stdout);
+        ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, mapart_data.image_data, image.x, image.y, config.maximum_height);
+    }
+
+    imagep_cleanup(&processed_image);
     if (processed_palette != NULL)
         float_palette_cleanup(&processed_palette);
+
+    image_cleanup(&mapart_data);
     image_cleanup(&image);
     image_cleanup(&dithered_image);
 
@@ -570,34 +567,17 @@ int get_palette(mapart_palette *palette) {
     return ret;
 }
 
-void image_cleanup(image_data *image) {
-    if (image->image_data != NULL)
-        free(image->image_data);
+void image_cleanup(void *image) {
+    if (((image_data *)image)->image_data != NULL)
+        free(((image_data *)image)->image_data);
 }
 
-void image_int_cleanup(image_int_data **image) {
-    if (*image != NULL) {
-        if ((*image)->image_data != NULL)
-            free((*image)->image_data);
-        free(*image);
-        *image = NULL;
-    }
-}
-
-void image_float_cleanup(image_float_data **image) {
-    if (*image != NULL) {
-        if ((*image)->image_data != NULL)
-            free((*image)->image_data);
-        free(*image);
-        *image = NULL;
-    }
-}
-
-
-void palette_cleanup(mapart_palette **palette) {
-    if (*palette != NULL) {
-        free(*palette);
-        *palette = NULL;
+void imagep_cleanup(void *image) {
+    if (*((image_data **)image) != NULL) {
+        if ((*((image_data **)image))->image_data != NULL)
+            free((*((image_data **)image))->image_data);
+        free(*((image_data **)image));
+        *((image_data **)image) = NULL;
     }
 }
 

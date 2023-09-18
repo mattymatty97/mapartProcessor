@@ -6,9 +6,9 @@
 
 // functions
 
-#define SIGN(x) (x > 0) - (x < 0)
+#define SIGN(x) ((x > 0) - (x < 0))
 
-#define SQR(x) (x)*(x)
+#define SQR(x) ((x)*(x))
 
 float deltaHsqr(float4 lab1, float4 lab2){
     float xDE = sqrt(SQR(lab2[1]) + SQR(lab2[2])) - sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
@@ -79,7 +79,6 @@ __kernel void Error_bleed_dither_by_cols(
                   __global int           *bleeding_params,
                   const uchar             bleeding_size,
                   const uchar             min_progress,
-                  __local volatile int   *mc_y,
                   const int              max_mc_height)
 {
     __local volatile uint        workgroup_number;
@@ -90,9 +89,6 @@ __kernel void Error_bleed_dither_by_cols(
 
         for (int i = 0; i < get_local_size(0); i++)
             progress[i]        = 0;
-        
-        for (int i = 0; i < get_local_size(0); i++)
-            mc_y[i]        = 0;
     }
 
 
@@ -100,6 +96,9 @@ __kernel void Error_bleed_dither_by_cols(
 
 
     int x = (workgroup_number * get_local_size(0)) + get_local_id(0);
+
+    
+    int curr_mc_height = 0;
 
     for (int y = 0; y < (height); y++)
     {
@@ -151,7 +150,6 @@ __kernel void Error_bleed_dither_by_cols(
             blacklisted_states[2] = true;
         }
 
-        int curr_mc_height = mc_y[get_local_id(0)];
         
         int tmp_mc_height = 0;
 
@@ -215,7 +213,7 @@ __kernel void Error_bleed_dither_by_cols(
             char delta = min_state - 1;
             if (max_mc_height > 0 && min_index != 0){
                 //if we're changing direction reset to 0
-                if ( SIGN(delta) == -SIGN(curr_mc_height) ){
+                if ( SIGN(delta) == - SIGN(curr_mc_height) ){
                     tmp_mc_height = delta;
                     //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
                 }else
@@ -234,7 +232,7 @@ __kernel void Error_bleed_dither_by_cols(
             }
         }
 
-        mc_y[get_local_id(0)] = tmp_mc_height;
+        curr_mc_height = tmp_mc_height;
 
         //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", x , y, min_d[0], min_d[1], min_d[2], min_d[3]);
         //printf("Result Pixel %d %d is %d %d\n", x , y, (int)min_index ,(int)min_state);
