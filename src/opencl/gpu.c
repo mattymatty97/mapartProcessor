@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <sys/stat.h>
 #include "gpu.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
@@ -7,11 +6,6 @@
 #define OPENCL_BUILD 4
 
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
-
-int
-gpu_get_program_source_from_mongo(main_options *config, char *program_name, size_t *source_size, char **program_source);
-
-int gpu_write_program_source_to_mongo(main_options *config, char *program_name, char *program_source);
 
 int gpu_init(main_options *config, gpu_t *gpu_holder) {
     cl_platform_id platform_id[3] = {};
@@ -120,109 +114,6 @@ void gpu_clear(gpu_t *gpu_holder) {
     clReleaseContext(gpu_holder->context);
 }
 
-int gpu_get_program_source_from_mongo(main_options *config, char *program_name, size_t *source_size,
-                                      char **program_source) {
-    int ret = 0;
-    mongoc_client_t *client;
-    mongoc_collection_t *collection;
-    mongoc_cursor_t *cursor;
-    const bson_t *doc;
-    bson_t *query;
-    char *str;
-
-    printf("Loading OpenCL program %s\n", program_name);
-
-    client = mongoc_client_pool_pop(config->mongo_session.pool);
-
-    collection = mongoc_client_get_collection(client, config->mongodb_database, "config");
-
-    query = bson_new();
-
-    BSON_APPEND_UTF8(query, "type", "opencl_src");
-    BSON_APPEND_UTF8(query, "name", program_name);
-    BSON_APPEND_INT32(query, "build", OPENCL_BUILD);
-
-    cursor = mongoc_collection_find_with_opts(collection, query, NULL, NULL);
-
-    if (mongoc_cursor_next(cursor, &doc)) {
-        printf("Program found, reading...\n");
-        bson_iter_t iter;
-        bson_iter_t colors_iter;
-        bson_iter_t multiplier_iter;
-        if (bson_iter_init_find(&iter, doc, "source") &&
-            BSON_ITER_HOLDS_CODE(&iter)) {
-            char i = 0;
-            *program_source = strdup((char *) bson_iter_code(&iter, (uint32_t *) &i));
-            *source_size = strlen(*program_source);
-        }
-        printf("Program read\n\n");
-    } else {
-        fprintf(stderr, "Program %s not Found!\n", program_name);
-        ret = 41;
-    }
-
-    bson_destroy(query);
-    mongoc_cursor_destroy(cursor);
-    mongoc_collection_destroy(collection);
-
-    mongoc_client_pool_push(config->mongo_session.pool, client);
-
-    return ret;
-}
-
-cl_int gpu_write_program_source_to_mongo(main_options *config, char *program_name, char *program_source) {
-    int ret = 0;
-
-    mongoc_client_t *client;
-    mongoc_collection_t *config_c;
-    mongoc_collection_t *pixels_c;
-    mongoc_cursor_t *cursor;
-    const bson_t *doc;
-    bson_t *query;
-    bson_error_t error;
-
-    printf("Uploading OpenCL program to MongoDB %s\n", program_name);
-
-    client = mongoc_client_pool_pop(config->mongo_session.pool);
-
-    config_c = mongoc_client_get_collection(client, config->mongodb_database, "config");
-
-    query = bson_new();
-
-    BSON_APPEND_UTF8(query, "type", "opencl_src");
-    BSON_APPEND_UTF8(query, "name", program_name);
-    BSON_APPEND_INT32(query, "build", OPENCL_BUILD);
-
-    //set flag entry in config
-    //or reset if already exists
-
-    //set as upsert
-    bson_t *param = BCON_NEW(
-            "upsert", BCON_BOOL(true)
-    );
-
-    //prepare upsert command
-    bson_t *upsert = BCON_NEW(
-            "$set", "{",
-            "source", BCON_CODE(program_source),
-            "}"
-    );
-
-    if (!mongoc_collection_update_one(config_c, query, upsert, param, NULL, &error)) {
-        //TODO add error handling;
-        ret = 19;
-    }
-
-    bson_destroy(param);
-    bson_destroy(upsert);
-    bson_destroy(query);
-    mongoc_collection_destroy(config_c);
-
-    mongoc_client_pool_push(config->mongo_session.pool, client);
-
-    return ret;
-}
-
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret) {
     char *source_str = NULL;
     size_t length = 0;
@@ -238,12 +129,6 @@ cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *fi
     source_str = calloc(length + 1, sizeof(char));
     fread(source_str, 1, length, fp);
     fclose(fp);
-
-    if (*ret == 5) {
-        *ret = gpu_get_program_source_from_mongo(config, filename, &length, &source_str);
-    } else {
-        *ret = gpu_write_program_source_to_mongo(config, filename, source_str);
-    }
 
     if (*ret == 0) {
         cl_program program = clCreateProgramWithSource(gpu_holder->context, 1, (const char **) &source_str, &length,
