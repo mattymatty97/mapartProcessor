@@ -1,8 +1,26 @@
+//constants
+
+#define WHT_L 1.8f
+
+#define WHT_C 1.0f
+
+// functions
+
 #define SIGN(x) (x > 0) - (x < 0)
 
 #define SQR(x) (x)*(x)
 
-float lab2Hue(float4 lab){
+float deltaHsqr(float4 lab1, float4 lab2){
+    float xDE = sqrt(SQR(lab2[1]) + SQR(lab2[2])) - sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
+
+    return SQR( lab2[1] - lab1[1]) + SQR( lab2[2] - lab1[2] ) - SQR(xDE);
+}
+
+float deltaH(float4 lab1, float4 lab2){
+    return sqrt( deltaHsqr(lab1,lab2) );
+}
+
+float deltaCMClab2Hue(float4 lab){
     float bias = 0;
          if (lab[1] >= 0 && lab[0] == 0 ) return 0;
     else if (lab[1] <  0 && lab[0] == 0 ) return 180;
@@ -15,15 +33,11 @@ float lab2Hue(float4 lab){
     return degrees(atan( lab[2] / lab[1] )) + bias;
 }
 
-#define WHT_L 1.8f
-
-#define WHT_C 1.0f
-
-float deltaCMC2(float4 lab1, float4 lab2){
+float deltaCMCsqr(float4 lab1, float4 lab2){
     float xC1 = sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
     float xC2 = sqrt( SQR(lab2[1]) + SQR(lab2[2]) );
     float xff = sqrt( pow(xC1, 4) / ( pow(xC1, 4) + 1900) );
-    float xH1 = lab2Hue(lab1);
+    float xH1 = deltaCMClab2Hue(lab1);
 
     float xTT = 0;
     if ( xH1 < 164 || xH1 > 345) xTT = 0.36f + fabs( 0.4f * cos( radians(  35.0f + xH1 ) ) );
@@ -43,6 +57,11 @@ float deltaCMC2(float4 lab1, float4 lab2){
     return SQR(xSL) + SQR(xSC) + SQR(xSH) + SQR(lab2[3] - lab1[3]);
 }
 
+float deltaCMC(float4 lab1, float4 lab2){
+    return sqrt( deltaCMCsqr(lab1,lab2) );
+}
+
+//kernel
 
 __kernel void Error_bleed_dither_by_cols(
                   __global float         *src,      
@@ -143,8 +162,11 @@ __kernel void Error_bleed_dither_by_cols(
         //randomly reset the height to spread out the errors
         float rand = noise[i];
 
+        //have the probability heavily tipped towards high y levels
         float f_x = abs(curr_mc_height)/ (float)max_mc_height;
         float compare = (pow((float)reference, f_x) - 1) / (reference - 1);
+
+
         if (max_mc_height > 0 && rand < compare){
             blacklisted_states[SIGN(curr_mc_height) + 1] = true;
             if (rand < compare - 0.005f){
@@ -168,25 +190,26 @@ __kernel void Error_bleed_dither_by_cols(
             min_d2_sum = SQR(min_d[3]);
 
             for(unsigned char p = 1; p < palette_indexes; p++){
-                for (unsigned char s = 0; s < palette_variations; s++){
-                    if (blacklisted_states[s]){
-                            continue;
+                if (p != 60)
+                    for (unsigned char s = 0; s < palette_variations; s++){
+                        if (blacklisted_states[s]){
+                                continue;
+                        }
+                        int palette_index = p * palette_variations + s;
+                        float4 palette = vload4(palette_index, Palette);
+
+                        tmp_d = pixel - palette;
+
+                        tmp_d2_sum = deltaCMCsqr(pixel, palette);
+
+                        if (tmp_d2_sum < min_d2_sum){
+                            min_d2_sum = tmp_d2_sum;
+                            min_index = p;
+                            min_state = s;
+                            min_d = tmp_d + 0;
+                        }
+
                     }
-                    int palette_index = p * palette_variations + s;
-                    float4 palette = vload4(palette_index, Palette);
-
-                    tmp_d = pixel - palette;
-
-                    tmp_d2_sum = deltaCMC2(pixel, palette);
-
-                    if (tmp_d2_sum < min_d2_sum){
-                        min_d2_sum = tmp_d2_sum;
-                        min_index = p;
-                        min_state = s;
-                        min_d = tmp_d + 0;
-                    }
-
-                }
             }
 
             char delta = min_state - 1;
@@ -228,12 +251,18 @@ __kernel void Error_bleed_dither_by_cols(
                 float4 spread_error = (min_d * param[2] / param[3]);
                 float4 dst_pixel = vload4(error_index, src);
 
-                tmp_d2_sum = deltaCMC2(pixel, dst_pixel);
 
-                if (tmp_d2_sum < 800){
-                    err_buf[(error_index * 4) + 0]  += spread_error[0];
+                float dH = deltaHsqr(pixel, dst_pixel);
+                float dA = pixel[3] - dst_pixel[3];
+                
+                err_buf[(error_index * 4) + 0]  += spread_error[0];
+
+                if (dH < 400){
                     err_buf[(error_index * 4) + 1]  += spread_error[1];
                     err_buf[(error_index * 4) + 2]  += spread_error[2];
+                }
+
+                if (dA < 128){
                     err_buf[(error_index * 4) + 3]  += spread_error[3];
                 }
             }
