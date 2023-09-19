@@ -3,3 +3,5 @@
 /.idea/
 /build/
 /images/
+/.vs
+/out/build/x64-Debug
