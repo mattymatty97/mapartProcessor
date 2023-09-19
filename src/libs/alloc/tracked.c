@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <malloc.h>
+#include <string.h>
 #define TRACKER_MAX 2048
 typedef struct  {
     void * ptr;
@@ -52,6 +53,16 @@ void* t_calloc(size_t count, size_t size){
     return ptr;
 }
 
+char* t_strdup(const char * src){
+    if (track_last > TRACKER_MAX){
+        return NULL;
+    }
+    char * ptr = strdup(src);
+    tracker_t tmp = {ptr, strlen(ptr)};
+    track(tmp);
+    return ptr;
+}
+
 void* t_realloc(void * old_ptr, size_t size){
     if (old_ptr == NULL){
         return t_malloc(size);
@@ -100,10 +111,10 @@ void t_free(void* ptr)
     }
 
     if (tracker == NULL && ptr != NULL)
-        printf("%p already freed\n", ptr);
+        printf("%p not tracked, maybe was already freed\n", ptr);
 }
 
-int t_isfree(void* ptr)
+int t_isTracked(void* ptr)
 {
     tracker_t * tracker = find(ptr);
     return tracker != NULL;

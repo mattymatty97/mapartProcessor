@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
                 break;
 
             case 'n':
-                config.project_name = strdup(optarg);
+                config.project_name = t_strdup(optarg);
                 break;
 
             case 't':
@@ -151,15 +151,15 @@ int main(int argc, char **argv) {
                 break;
 
             case 'i':
-                config.image_filename = strdup(optarg);
+                config.image_filename = t_strdup(optarg);
                 break;
 
             case 'p':
-                config.palette_name = strdup(optarg);
+                config.palette_name = t_strdup(optarg);
                 break;
 
             case 'd':
-                config.dithering = strdup(optarg);
+                config.dithering = t_strdup(optarg);
                 break;
 
             case 'r':
@@ -518,7 +518,7 @@ int get_palette(mapart_palette *palette_o) {
 
                     if (bson_iter_recurse(&colors_iter, &entry) &&
                     bson_iter_find(&entry, "name") && BSON_ITER_HOLDS_UTF8(&entry)) {
-                        palette_id_names[color_id] = strdup(bson_iter_utf8(&entry, NULL));
+                        palette_id_names[color_id] = t_strdup(bson_iter_utf8(&entry, NULL));
                     }
 
                     bson_iter_t rgb_iter;
