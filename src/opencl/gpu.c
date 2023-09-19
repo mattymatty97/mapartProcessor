@@ -3,6 +3,10 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
+#define RGB_SIZE 3
+#define RGBA_SIZE 4
+#define MULTIPLIER_SIZE 3
+
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
 
 int gpu_init(main_options *config, gpu_t *gpu_holder) {
@@ -472,16 +476,15 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
 
 //Dithering
 
-int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise,
-                                    unsigned int x, unsigned int y, unsigned char palette_indexes,
-                                    unsigned char palette_variations, int *bleeding_params,
+int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise,
+                                    unsigned int x, unsigned int y, unsigned char palette_indexes, int *bleeding_params,
                                     unsigned char bleeding_count, unsigned char min_required_pixels,
                                     int max_minecraft_y) {
-    unsigned long buffer_size = x * y * 4;
-    unsigned long palette_size = palette_indexes * palette_variations * 4;
+    unsigned long buffer_size = x * y * RGBA_SIZE;
+    unsigned long palette_size = palette_indexes * MULTIPLIER_SIZE * RGBA_SIZE;
     unsigned long output_size = x * y * 2;
     unsigned long noise_size = x * y;
-    unsigned long bleeding_size = bleeding_count * 4;
+    unsigned long bleeding_size = bleeding_count * RGBA_SIZE;
     //iterate vertically for mc compatibility
     size_t global_workgroup_size = x;
     size_t local_workgroup_size = MIN(x, gpu->max_parallelism);
@@ -492,6 +495,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
     cl_mem palette_mem_obj = NULL;
+    cl_mem palette_id_mem_obj = NULL;
     cl_mem noise_mem_obj = NULL;
     cl_mem error_buf_mem_obj = NULL;
     cl_mem workgroup_rider_mem_obj = NULL;
@@ -505,14 +509,17 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                    buffer_size * sizeof(float), input, &ret);
     if (ret == 0)
+        output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
+                                        output_size * sizeof(unsigned char), NULL, &ret);
+    if (ret == 0)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                          palette_size * sizeof(float), palette, &ret);
     if (ret == 0)
+        palette_id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                                            palette_indexes * sizeof(unsigned char), valid_palette_ids, &ret);
+    if (ret == 0)
         noise_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                        noise_size * sizeof(float), noise, &ret);
-    if (ret == 0)
-        output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
-                                        output_size * sizeof(unsigned char), NULL, &ret);
     if (ret == 0)
         error_buf_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                            buffer_size * sizeof(float), NULL, &ret);
@@ -525,6 +532,18 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == 0 && bleeding_count > 0)
         bleeding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                           bleeding_size * sizeof(int), bleeding_params, &ret);
+
+    //request clean the error buffer
+    float pattern = 0;
+
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (float), 0, buffer_size * sizeof(float), 0, NULL, &event);
+
+    unsigned int i_pattern = 0;
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_progress_mem_obj, &i_pattern, sizeof(unsigned int), 0, global_workgroup_size * sizeof(unsigned int), 0, NULL, &event);
 
     //create kernel
     if (ret == 0)
@@ -540,6 +559,8 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &palette_mem_obj);
     if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &palette_id_mem_obj);
+    if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &noise_mem_obj);
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &workgroup_rider_mem_obj);
@@ -554,8 +575,6 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &palette_indexes);
     if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &palette_variations);
-    if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &bleeding_mem_obj);
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &bleeding_count);
@@ -563,6 +582,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &min_required_pixels);
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
+
 
     //request the gpu process
     if (ret == 0)
@@ -588,6 +608,8 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
         clReleaseMemObject(input_mem_obj);
     if (palette_mem_obj != NULL)
         clReleaseMemObject(palette_mem_obj);
+    if (palette_id_mem_obj != NULL)
+        clReleaseMemObject(palette_id_mem_obj);
     if (noise_mem_obj != NULL)
         clReleaseMemObject(noise_mem_obj);
     if (output_mem_obj != NULL)
@@ -604,30 +626,28 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     return ret;
 }
 
-int gpu_dither_none(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                    unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
+int gpu_dither_none(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
                     int max_minecraft_y) {
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations, NULL,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes, NULL,
                                            0, 0, max_minecraft_y);
 }
 
-int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise,
-                               unsigned int x, unsigned int y, unsigned char palette_indexes,
-                               unsigned char palette_variations, int max_minecraft_y) {
+int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[4][4] = {
             {0, 1,  7, 16},
             {1, -1, 3, 16},
             {1, 0,  5, 16},
             {1, 1,  1, 16}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 4, 2, max_minecraft_y);
 }
 
-int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                    unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
+int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
                     int max_minecraft_y) {
     int bleeding_parameters[12][4] = {
             {0, 1,  7, 48},
@@ -643,14 +663,13 @@ int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char *output, float *pale
             {2, 1,  3, 48},
             {2, 2,  1, 48}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 12, 3, max_minecraft_y);
 }
 
-int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y) {
+int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[12][4] = {
             {0, 1,  8, 42},
             {0, 2,  4, 42},
@@ -665,14 +684,13 @@ int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char *output, float *pa
             {2, 1,  2, 42},
             {2, 2,  1, 42}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 12, 3, max_minecraft_y);
 }
 
-int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                        unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                        int max_minecraft_y) {
+int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[6][4] = {
             {0, 1,  1, 8},
             {0, 2,  1, 8},
@@ -681,14 +699,13 @@ int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char *output, float *
             {1, 1,  1, 8},
             {2, 0,  1, 8}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 6, 3, max_minecraft_y);
 }
 
-int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y) {
+int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[7][4] = {
             {0, 1,  8, 32},
             {0, 2,  4, 32},
@@ -698,14 +715,13 @@ int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char *output, float *pa
             {1, 1,  4, 32},
             {1, 2,  2, 32}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 7, 3, max_minecraft_y);
 }
 
-int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y) {
+int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[10][4] = {
             {0, 1,  5, 32},
             {0, 2,  3, 32},
@@ -718,14 +734,13 @@ int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char *output, float *pa
             {2, 0,  3, 32},
             {2, 1,  2, 32}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 10, 3, max_minecraft_y);
 }
 
-int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                       unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                       int max_minecraft_y) {
+int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[7][4] = {
             {0, 1,  4, 16},
             {0, 2,  3, 16},
@@ -735,21 +750,19 @@ int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char *output, float *p
             {1, 1,  2, 16},
             {1, 2,  1, 16}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 7, 3, max_minecraft_y);
 }
 
-int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                       unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                       int max_minecraft_y) {
+int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y) {
     int bleeding_parameters[3][4] = {
             {0, 1,  2, 4},
             {1, -1, 1, 4},
             {1, 0,  1, 4}
     };
-    return gpu_internal_dither_error_bleed(gpu, input, output, palette, noise, x, y, palette_indexes,
-                                           palette_variations,
+    return gpu_internal_dither_error_bleed(gpu, input, output, palette, valid_palette_ids, noise, x, y, palette_indexes,
                                            (int *) bleeding_parameters, 3, 2, max_minecraft_y);
 }
 
@@ -864,6 +877,15 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
     if (ret == 0)
         error_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                  sizeof(unsigned int), NULL, &ret);
+
+    //request clean the error indicator
+    unsigned int pattern = 0;
+
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+
 
     //create kernel
     if (ret == 0)

@@ -67,7 +67,8 @@ __kernel void Error_bleed_dither_by_cols(
                   __global float         *src,      
                   __global uchar         *dst,      
                   __global float         *err_buf,     
-                  __global float         *Palette,  
+                  __global float         *Palette,
+                  __global uchar         *valid_palette_ids,
                   __global float         *noise,
                   __global uint          *workgroup_rider, 
                   __global volatile uint *workgroup_progress,
@@ -75,7 +76,6 @@ __kernel void Error_bleed_dither_by_cols(
                   const uint              width,
                   const uint              height,
                   const uchar             palette_indexes,
-                  const uchar             palette_variations,
                   __global int           *bleeding_params,
                   const uchar             bleeding_size,
                   const uchar             min_progress,
@@ -188,12 +188,14 @@ __kernel void Error_bleed_dither_by_cols(
             min_d2_sum = SQR(min_d[3]);
 
             for(unsigned char p = 1; p < palette_indexes; p++){
-                if (p != 60)
-                    for (unsigned char s = 0; s < palette_variations; s++){
+                //if (x == 0 && y == 0)
+                //    printf("palette %d has validity of %d\n", p, valid_palette_ids[p]);
+                if (valid_palette_ids[p] > 0)
+                    for (unsigned char s = 0; s < 3; s++){
                         if (blacklisted_states[s]){
                                 continue;
                         }
-                        int palette_index = p * palette_variations + s;
+                        int palette_index = p * 3 + s;
                         float4 palette = vload4(palette_index, Palette);
 
                         tmp_d = pixel - palette;

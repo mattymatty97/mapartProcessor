@@ -49,17 +49,9 @@ static struct option long_options[] = {
 
 main_options config = {};
 
-#define PALETTE_SIZE 62
 #define RGB_SIZE 3
 #define RGBA_SIZE 4
-
-#ifdef MAPART_SURVIVAL
 #define MULTIPLIER_SIZE 3
-#define BUILD_LIMIT -1
-#else
-#define MULTIPLIER_SIZE 4
-#define BUILD_LIMIT -1
-#endif
 
 //----------------DEFINITIONS---------------
 
@@ -78,14 +70,12 @@ typedef image_data image_float_data;
 
 typedef struct {
     char *palette_name;
-    int palette[PALETTE_SIZE][MULTIPLIER_SIZE][RGBA_SIZE];
+    unsigned int palette_size;
+    void  *palette;
+    unsigned char *valid_ids;
 } mapart_palette;
 
-typedef struct {
-    char *palette_name;
-    float palette[PALETTE_SIZE][MULTIPLIER_SIZE][RGBA_SIZE];
-} mapart_float_palette;
-
+typedef mapart_palette mapart_float_palette;
 
 typedef enum {
     none,
@@ -101,14 +91,14 @@ typedef enum {
 
 void image_cleanup(void *image);
 void imagep_cleanup(void *image);
-
-void float_palette_cleanup(mapart_float_palette **palette);
+void palette_cleanup(void *image);
+void imagep_cleanup(void *image);
 
 int load_image(image_data *image);
 
 int save_image(mapart_palette *palette, image_data *dither_image);
 
-int get_palette(mapart_palette *palette);
+int get_palette(mapart_palette *palette_o);
 
 //-------------IMPLEMENTATIONS---------------------
 
@@ -122,7 +112,7 @@ unsigned int str_hash(const char *word) {
 
 int main(int argc, char **argv) {
     config.random_seed = str_hash("seed string");
-    config.maximum_height = BUILD_LIMIT;
+    config.maximum_height = -1;
 
     int ret = 0;
 
@@ -297,20 +287,21 @@ int main(int argc, char **argv) {
         //convert palette to CIE-L*ab + alpha
         if (ret == 0) {
             mapart_float_palette *Lab_palette = calloc(1, sizeof(mapart_float_palette));
-            Lab_palette->palette_name = palette.palette_name;
+            Lab_palette->palette_name = strdup(palette.palette_name);
+            Lab_palette->palette_size = palette.palette_size;
+            Lab_palette->valid_ids = palette.valid_ids;
+            Lab_palette->palette = calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
 
 
-            float *palette_xyz_data = calloc(PALETTE_SIZE * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
+            float *palette_xyz_data = calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
             fprintf(stdout, "Converting palette to XYZ\n");
             fflush(stdout);
-            ret = gpu_rgb_to_xyz(&config.gpu, &palette.palette[0][0][0], palette_xyz_data, MULTIPLIER_SIZE,
-                                 PALETTE_SIZE);
+            ret = gpu_rgb_to_xyz(&config.gpu, palette.palette, palette_xyz_data, MULTIPLIER_SIZE,palette.palette_size);
 
             if (ret == 0) {
                 fprintf(stdout, "Converting palette to CIE-L*ab\n");
                 fflush(stdout);
-                ret = gpu_xyz_to_lab(&config.gpu, palette_xyz_data, &Lab_palette->palette[0][0][0],
-                                     MULTIPLIER_SIZE, PALETTE_SIZE);
+                ret = gpu_xyz_to_lab(&config.gpu, palette_xyz_data, Lab_palette->palette,MULTIPLIER_SIZE, palette.palette_size);
             }
             free(palette_xyz_data);
 
@@ -338,52 +329,30 @@ int main(int argc, char **argv) {
 
         fprintf(stdout, "Do image dithering\n");
         fflush(stdout);
-        if (dither == none) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_none(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                  &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                  MULTIPLIER_SIZE, config.maximum_height);
-        } else if (dither == Floyd_Steinberg) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_floyd_steinberg(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                             &processed_palette->palette[0][0][0], noise, image.x, image.y,
-                                             PALETTE_SIZE, MULTIPLIER_SIZE, config.maximum_height);
+
+        dither_function dither_func = &gpu_dither_none;
+
+        if (dither == Floyd_Steinberg) {
+            dither_func = &gpu_dither_floyd_steinberg;
         } else if (dither == JJND) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_JJND(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                  &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                  MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_JJND;
         } else if (dither == Stucki) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_Stucki(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                    &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                    MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_Stucki;
         } else if (dither == Atkinson) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_Atkinson(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                      &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                      MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_Atkinson;
         } else if (dither == Burkes) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_Burkes(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                    &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                    MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_Burkes;
         } else if (dither == Sierra) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_Sierra(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                    &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                    MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_Sierra;
         } else if (dither == Sierra2) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_Sierra2(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                     &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                     MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_Sierra2;
         } else if (dither == SierraL) {
-            dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-            ret = gpu_dither_SierraL(&config.gpu, processed_image->image_data, dithered_image.image_data,
-                                     &processed_palette->palette[0][0][0], noise, image.x, image.y, PALETTE_SIZE,
-                                     MULTIPLIER_SIZE, config.maximum_height);
+            dither_func = &gpu_dither_SierraL;
         }
+
+        dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
+        ret = dither_func(&config.gpu, processed_image->image_data, dithered_image.image_data, processed_palette->palette, processed_palette->valid_ids, noise, image.x, image.y, palette.palette_size, config.maximum_height);
+
         free(noise);
     }
 
@@ -401,9 +370,6 @@ int main(int argc, char **argv) {
     }
 
     imagep_cleanup(&processed_image);
-    if (processed_palette != NULL)
-        float_palette_cleanup(&processed_palette);
-
     image_cleanup(&mapart_data);
     image_cleanup(&image);
     image_cleanup(&dithered_image);
@@ -438,9 +404,9 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
 
     fprintf(stdout, "Convert dithered image back to rgb\n");
     fflush(stdout);
-    ret = gpu_palette_to_rgb(&config.gpu, dither_image->image_data, &palette->palette[0][0][0],
-                             converted_image.image_data, dither_image->x, dither_image->y, PALETTE_SIZE,
-                             MULTIPLIER_SIZE);
+
+    ret = gpu_palette_to_rgb(&config.gpu, dither_image->image_data, palette->palette,
+                             converted_image.image_data, dither_image->x, dither_image->y, palette->palette_size, MULTIPLIER_SIZE);
 
     char filename[1000] = "images/";
     char filename2[1000] = "images/";
@@ -482,24 +448,9 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
 
 #include <bson.h>
 
-int get_palette(mapart_palette *palette) {
+int get_palette(mapart_palette *palette_o) {
     int ret = 0;
-    bson_t *query;
     bson_error_t error = {};
-    char *str;
-
-    //init palette
-    for (int i = 0; i < PALETTE_SIZE; i++) {
-        for (int j = 0; j < MULTIPLIER_SIZE; j++) {
-            palette->palette[i][j][0] = -255;
-            palette->palette[i][j][1] = -255;
-            palette->palette[i][j][2] = -255;
-            //init transparency
-            palette->palette[i][j][3] = 255 * (i != 0);
-        }
-    }
-
-    int multipliers[MULTIPLIER_SIZE];
 
     printf("Loading palette\n");
 
@@ -518,44 +469,81 @@ int get_palette(mapart_palette *palette) {
             bson_iter_t iter;
             bson_iter_t colors_iter;
             bson_iter_t multiplier_iter;
+
+            int multipliers[MULTIPLIER_SIZE] = {};
+
             if (bson_iter_init_find(&iter, &doc, "multipliers") &&
                 BSON_ITER_HOLDS_ARRAY(&iter) && bson_iter_recurse(&iter, &multiplier_iter)) {
-                char i = 0;
-                while (bson_iter_next(&multiplier_iter) && i < MULTIPLIER_SIZE) {
-                    multipliers[i++] = bson_iter_int32_unsafe(&multiplier_iter);
+                unsigned char index = 0;
+                while (bson_iter_next(&multiplier_iter) && index < MULTIPLIER_SIZE) {
+                    multipliers[index++] = bson_iter_int32(&multiplier_iter);
                 }
             }
+
+            unsigned int   palette_index = 0;
+            unsigned int   palette_size = 1;
+            int*           palette = calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
+            unsigned char* valid_id = calloc(1,sizeof (unsigned char));
+
             //if object has color list
             if (bson_iter_init_find(&iter, &doc, "colors") &&
                 BSON_ITER_HOLDS_ARRAY(&iter) && bson_iter_recurse(&iter, &colors_iter)) {
                 while (bson_iter_next(&colors_iter)) {
                     bson_iter_t entry;
                     bson_iter_recurse(&colors_iter, &entry);
-                    int color_id = -1;
-                    int rgb[RGB_SIZE] = {-255, -255, -255};
+                    int color_id = 0;
+                    int rgb[RGBA_SIZE] = {-255, -255, -255, 255};
+
                     if (bson_iter_find(&entry, "id") && BSON_ITER_HOLDS_INT32(&entry)) {
-                        color_id = bson_iter_int32_unsafe(&entry);
+                        color_id = bson_iter_int32(&entry);
                     }
+
+                    if (palette_size < (color_id + 1)) {
+                        unsigned int old_size = palette_size;
+                        while (palette_size < (color_id + 1)) {
+                            palette_size *= 2;
+                        }
+                        palette = realloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE * sizeof(int));
+                        valid_id = realloc(valid_id, palette_size * sizeof(unsigned char));
+                        for (old_size; old_size < palette_size; old_size++){
+                            valid_id[old_size] = 0;
+                        }
+                    }
+
+                    if (palette_index < (color_id + 1) )
+                        palette_index = (color_id + 1);
+
+
                     bson_iter_t rgb_iter;
-                    if (bson_iter_find(&entry, "color") && BSON_ITER_HOLDS_ARRAY(&entry) &&
+                    if (bson_iter_recurse(&colors_iter, &entry) &&
+                        bson_iter_find(&entry, "color") && BSON_ITER_HOLDS_ARRAY(&entry) &&
                         bson_iter_recurse(&entry, &rgb_iter)) {
                         int index = 0;
                         while (bson_iter_next(&rgb_iter) && index < RGB_SIZE) {
-                            rgb[index++] = bson_iter_int32_unsafe(&rgb_iter);
+                            rgb[index++] = bson_iter_int32(&rgb_iter);
                         }
                     }
-                    if (color_id >= 0 && color_id < PALETTE_SIZE) {
-                        //skip transparent id
-                        if (color_id != 0) {
-                            // prepare the various multipliers
-                            for (int i = 0; i < MULTIPLIER_SIZE; i++) {
-                                palette->palette[color_id][i][0] = (int) floor((double) rgb[0] * multipliers[i] / 255);
-                                palette->palette[color_id][i][1] = (int) floor((double) rgb[1] * multipliers[i] / 255);
-                                palette->palette[color_id][i][2] = (int) floor((double) rgb[2] * multipliers[i] / 255);
-                            }
-                        }
+
+                    // prepare the various multipliers
+                    for (int i = 0; i < MULTIPLIER_SIZE; i++) {
+                        unsigned int p_i = (color_id * MULTIPLIER_SIZE * RGBA_SIZE) + (i * RGBA_SIZE);
+                        palette[p_i + 0] = (int) floor((double) rgb[0] * multipliers[i] / 255);
+                        palette[p_i + 1] = (int) floor((double) rgb[1] * multipliers[i] / 255);
+                        palette[p_i + 2] = (int) floor((double) rgb[2] * multipliers[i] / 255);
+                        palette[p_i + 3] = (color_id!=0)?255:0;
+                    }
+
+                    if (bson_iter_recurse(&colors_iter, &entry) &&
+                        bson_iter_find(&entry, "usable") && BSON_ITER_HOLDS_BOOL(&entry)) {
+                        valid_id[color_id] = bson_iter_bool(&entry);
                     }
                 }
+                palette_size = palette_index;
+                palette_o->palette_size = palette_size;
+                palette = realloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE * sizeof(int));
+                valid_id = realloc(valid_id, palette_size * sizeof(unsigned char));
+                palette_o->palette = palette;
+                palette_o->valid_ids = valid_id;
             }
             printf("Palette loaded\n\n");
         }
@@ -581,9 +569,10 @@ void imagep_cleanup(void *image) {
     }
 }
 
-void float_palette_cleanup(mapart_float_palette **palette) {
-    if (*palette != NULL) {
-        free(*palette);
-        *palette = NULL;
+void palette_cleanup(void *palette){
+    if ( *((mapart_palette **)palette) != NULL ){
+        free((*((mapart_palette **)palette))->palette);
+        free((*((mapart_palette **)palette))->palette_name);
+        free((*((mapart_palette **)palette))->valid_ids);
     }
 }

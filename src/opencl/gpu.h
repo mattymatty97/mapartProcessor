@@ -44,41 +44,47 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int x, unsi
 
 int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int x, unsigned int y);
 
-int gpu_dither_none(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                    unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
+
+typedef int (*dither_function)(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                               unsigned int y, unsigned char palette_indexes,
+                               int max_minecraft_y);
+
+
+int gpu_dither_none(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
                     int max_minecraft_y);
 
-int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise,
-                               unsigned int x, unsigned int y, unsigned char palette_indexes,
-                               unsigned char palette_variations, int max_minecraft_y);
-
-int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                    unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
+int gpu_dither_floyd_steinberg(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
                     int max_minecraft_y);
 
-int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y);
+int gpu_dither_JJND(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
-int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                        unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                        int max_minecraft_y);
+int gpu_dither_Stucki(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
-int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y);
+int gpu_dither_Atkinson(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
-int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                      unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                      int max_minecraft_y);
+int gpu_dither_Burkes(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
-int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                       unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                       int max_minecraft_y);
+int gpu_dither_Sierra(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
-int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char *output, float *palette, float *noise, unsigned int x,
-                       unsigned int y, unsigned char palette_indexes, unsigned char palette_variations,
-                       int max_minecraft_y);
+int gpu_dither_Sierra2(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
+
+int gpu_dither_SierraL(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, float *noise, unsigned int x,
+                    unsigned int y, unsigned char palette_indexes,
+                    int max_minecraft_y);
 
 // de-conversion
 
