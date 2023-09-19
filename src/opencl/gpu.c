@@ -958,7 +958,7 @@ int gpu_height_to_block_count(gpu_t *gpu, unsigned int *input,
     unsigned long input_size = x * y * 2;
     unsigned long id_count_size = id_size;
     unsigned long layer_count_size = max_height;
-    unsigned long layer_id_count_size = layer_count_size * max_height;
+    unsigned long layer_id_count_size = id_size * max_height;
 
     //iterate vertically for mc compatibility
     size_t global_workgroup_size = x * y;
