@@ -7,6 +7,16 @@
   ],
   "colors": [
     {
+      "id": 0,
+      "name": "AIR",
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "usable":  true
+    },
+    {
       "id": 1,
       "name": "GRASS",
       "color": [

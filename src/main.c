@@ -103,6 +103,8 @@ int load_image(image_data *image);
 
 int save_image(mapart_palette *palette, image_data *dither_image);
 
+int save_stats(mapart_palette *palette, image_uint_data *mapart_image);
+
 int get_palette(mapart_palette *palette_o);
 
 //-------------IMPLEMENTATIONS---------------------
@@ -372,6 +374,12 @@ int main(int argc, char **argv) {
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, mapart_data.image_data, image.x, image.y, config.maximum_height);
     }
 
+    if (ret == 0) {
+        fprintf(stdout, "Save Block Statistics\n");
+        fflush(stdout);
+        ret = save_stats(&palette, &mapart_data);
+    }
+
     palette_cleanup(&processed_palette);
     palette_cleanup(&palette);
 
@@ -415,7 +423,6 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
                              converted_image.image_data, dither_image->x, dither_image->y, palette->palette_size, MULTIPLIER_SIZE);
 
     char filename[1000] = "images/";
-    char filename2[1000] = "images/";
     if (ret == 0) {
         char *appendix = "";
 
@@ -430,7 +437,6 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
         }
 
         sprintf(&filename[7], "%s_%s%s.png", config.project_name, config.dithering, appendix);
-        sprintf(&filename2[7], "%s_%s%s.mapart", config.project_name, config.dithering, appendix);
 
         fprintf(stdout, "Save image\n");
         fflush(stdout);
@@ -450,116 +456,199 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     return ret;
 }
 
-#include <bson.h>
+
+int save_stats(mapart_palette *palette, image_uint_data *mapart_image) {
+    int ret = 0;
+    int height = config.maximum_height;
+    if (height < 0)
+        return 0;
+    if (height >= 0 && height <= 2)
+        height = 1;
+    unsigned int *id_count        = t_calloc(palette->palette_size          , sizeof (unsigned int));
+    unsigned int *layer_count     = t_calloc(height                         , sizeof (unsigned int));
+    unsigned int *layer_id_count  = t_calloc(palette->palette_size * height , sizeof (unsigned int));
+
+    ret = gpu_height_to_block_count(&config.gpu, mapart_image->image_data, id_count, layer_count, layer_id_count, mapart_image->x, mapart_image->y, palette->palette_size, height);
+
+    if (ret == 0){
+        char filename[100] = "images/";
+        char *appendix = "";
+
+        if (config.maximum_height == 0)
+            appendix = "_flat";
+        else if (config.maximum_height < 0)
+            appendix = "_unlimited";
+        else {
+            char smallbuff[20] = {};
+            sprintf(smallbuff, "_%d", config.maximum_height);
+            appendix = smallbuff;
+        }
+
+        sprintf(&filename[7], "%s_%s%s_stats.csv", config.project_name, config.dithering, appendix);
+        FILE *stat_file = fopen(filename, "w+");
+        if (stat_file) {
+            fprintf(stat_file, "Layer,Block Id,Count\n");
+
+            for (int i = 0; i < palette->palette_size; i++) {
+                unsigned int count = id_count[i];
+                if (count > 0)
+                    fprintf(stat_file, "-,%s,%d\n", palette->palette_id_names[i], count);
+            }
+
+            for (int i = 0; i < height; i++) {
+                if (layer_count[i] > 0)
+                    for (int j = 0; j < palette->palette_size; j++) {
+                        unsigned int count = layer_id_count[(i * palette->palette_size) + j];
+                        if (count > 0)
+                            fprintf(stat_file, "%d,%s,%d\n", i, palette->palette_id_names[j], count);
+                    }
+            }
+
+            fclose(stat_file);
+        } else {
+            fprintf(stderr, "Failed to open stat file %s: %s\n", filename, strerror(errno));
+        }
+    }
+
+    t_free(id_count);
+    t_free(layer_count);
+    t_free(layer_id_count);
+    return ret;
+}
+
+#include "libs/json/cJSON.h"
 
 int get_palette(mapart_palette *palette_o) {
     int ret = 0;
-    bson_error_t error = {};
 
     printf("Loading palette\n");
 
-    bson_json_reader_t *reader = bson_json_reader_new_from_file(config.palette_name, &error);
-    if (reader != NULL) {
-        bool eof = 0;
-        bson_t doc = BSON_INITIALIZER;
-        ret = bson_json_reader_read(reader, &doc, &error) <= 0;
-        if (ret != 0) {
-            fprintf(stderr, "Error reading bson: \n%s\n", error.message);
-            ret = 2;
-        }
-
-        if (ret == 0) {
-            printf("Palette found, processing...\n");
-            bson_iter_t iter;
-            bson_iter_t colors_iter;
-            bson_iter_t multiplier_iter;
-
-            int multipliers[MULTIPLIER_SIZE] = {};
-
-            if (bson_iter_init_find(&iter, &doc, "multipliers") &&
-                BSON_ITER_HOLDS_ARRAY(&iter) && bson_iter_recurse(&iter, &multiplier_iter)) {
-                unsigned char index = 0;
-                while (bson_iter_next(&multiplier_iter) && index < MULTIPLIER_SIZE) {
-                    multipliers[index++] = bson_iter_int32(&multiplier_iter);
-                }
-            }
-
-            unsigned int   palette_index = 0;
-            unsigned int   palette_size = 1;
-            int*           palette = t_calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
-            unsigned char* valid_id = t_calloc(1,sizeof (unsigned char));
-                    char** palette_id_names = t_calloc(1,sizeof (char*));
-
-            //if object has color list
-            if (bson_iter_init_find(&iter, &doc, "colors") &&
-                BSON_ITER_HOLDS_ARRAY(&iter) && bson_iter_recurse(&iter, &colors_iter)) {
-                while (bson_iter_next(&colors_iter)) {
-                    bson_iter_t entry;
-                    bson_iter_recurse(&colors_iter, &entry);
-                    int color_id = 0;
-                    int rgb[RGBA_SIZE] = {-255, -255, -255, 255};
-
-                    if (bson_iter_find(&entry, "id") && BSON_ITER_HOLDS_INT32(&entry)) {
-                        color_id = bson_iter_int32(&entry);
-                    }
-
-                    if (palette_size < (color_id + 1)) {
-                        unsigned int old_size = palette_size;
-                        while (palette_size < (color_id + 1)) {
-                            palette_size *= 2;
-                        }
-                        palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
-                        valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
-                        palette_id_names = t_recalloc(palette_id_names, palette_size , sizeof(char *));
-                    }
-
-                    if (palette_index < (color_id + 1) )
-                        palette_index = (color_id + 1);
-
-                    if (bson_iter_recurse(&colors_iter, &entry) &&
-                    bson_iter_find(&entry, "name") && BSON_ITER_HOLDS_UTF8(&entry)) {
-                        palette_id_names[color_id] = t_strdup(bson_iter_utf8(&entry, NULL));
-                    }
-
-                    bson_iter_t rgb_iter;
-                    if (bson_iter_recurse(&colors_iter, &entry) &&
-                        bson_iter_find(&entry, "color") && BSON_ITER_HOLDS_ARRAY(&entry) &&
-                        bson_iter_recurse(&entry, &rgb_iter)) {
-                        int index = 0;
-                        while (bson_iter_next(&rgb_iter) && index < RGB_SIZE) {
-                            rgb[index++] = bson_iter_int32(&rgb_iter);
-                        }
-                    }
-
-                    // prepare the various multipliers
-                    for (int i = 0; i < MULTIPLIER_SIZE; i++) {
-                        unsigned int p_i = (color_id * MULTIPLIER_SIZE * RGBA_SIZE) + (i * RGBA_SIZE);
-                        palette[p_i + 0] = (int) floor((double) rgb[0] * multipliers[i] / 255);
-                        palette[p_i + 1] = (int) floor((double) rgb[1] * multipliers[i] / 255);
-                        palette[p_i + 2] = (int) floor((double) rgb[2] * multipliers[i] / 255);
-                        palette[p_i + 3] = (color_id!=0)?255:0;
-                    }
-
-                    if (bson_iter_recurse(&colors_iter, &entry) &&
-                        bson_iter_find(&entry, "usable") && BSON_ITER_HOLDS_BOOL(&entry)) {
-                        valid_id[color_id] = bson_iter_bool(&entry);
-                    }
-                }
-                palette_size = palette_index;
-                palette_o->palette_size = palette_size;
-                palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
-                valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
-                palette_o->palette = palette;
-                palette_o->valid_ids = valid_id;
-                palette_o->palette_id_names = palette_id_names;
-            }
-            printf("Palette loaded\n\n");
-        }
-        bson_json_reader_destroy(reader);
-    } else {
-        fprintf(stderr, "Error opening palette file %s:\n%s\n", config.palette_name, error.message);
-        ret = 1;
+    FILE *palette_f = fopen(config.palette_name, "r");
+    if (!palette_f){
+        fprintf(stderr, "Error Opening palette file %s: %s\n", config.palette_name, strerror(errno));
+        return 100;
     }
+    fseek(palette_f,0,SEEK_END);
+    size_t lenght = ftell(palette_f);
+    char* palette_str = t_calloc(lenght, sizeof (char));
+    rewind(palette_f);
+    fread(palette_str, sizeof (char), lenght, palette_f);
+    fclose(palette_f);
+
+    cJSON_Hooks hooks = {
+            t_malloc,
+            t_free
+    };
+
+    cJSON_InitHooks(&hooks);
+    cJSON *palette_json = cJSON_Parse(palette_str);
+
+    t_free(palette_str);
+
+    if (palette_json == NULL)
+    {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        ret = 101;
+    }
+
+    if (ret == 0){
+        cJSON *target;
+
+        int multipliers[MULTIPLIER_SIZE] = {};
+
+        target = cJSON_GetObjectItemCaseSensitive(palette_json, "multipliers");
+        if (target != NULL && cJSON_IsArray(target)){
+            cJSON *element;
+            unsigned char index = 0;
+            cJSON_ArrayForEach( element, target){
+                if (index < MULTIPLIER_SIZE)
+                    multipliers[index++] = element->valueint;
+            }
+            target = NULL;
+        }
+
+        unsigned int   palette_index = 0;
+        unsigned int   palette_size = 1;
+        int*           palette = t_calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
+        unsigned char* valid_id = t_calloc(1,sizeof (unsigned char));
+        char** palette_id_names = t_calloc(1,sizeof (char*));
+
+        target = cJSON_GetObjectItemCaseSensitive(palette_json, "colors");
+        if (target != NULL && cJSON_IsArray(target)){
+            cJSON *element;
+            cJSON_ArrayForEach(element, target){
+                cJSON *element_target;
+
+                int color_id = 0;
+                int rgb[RGBA_SIZE] = {-255, -255, -255, 255};
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "id");
+                if (element_target != NULL && cJSON_IsNumber(element_target)){
+                    color_id = element_target->valueint;
+                    element_target = NULL;
+                }
+
+                if (palette_size < (color_id + 1)) {
+                    unsigned int old_size = palette_size;
+                    while (palette_size < (color_id + 1)) {
+                        palette_size *= 2;
+                    }
+                    palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
+                    valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
+                    palette_id_names = t_recalloc(palette_id_names, palette_size , sizeof(char *));
+                }
+
+                if (palette_index < (color_id + 1) )
+                    palette_index = (color_id + 1);
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "name");
+                if (element_target != NULL && cJSON_IsString(element_target)){
+                    palette_id_names[color_id] = t_strdup(element_target->valuestring);
+                    element_target = NULL;
+                }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "color");
+                if (element_target != NULL && cJSON_IsArray(element_target)){
+                    cJSON *rgb_element;
+                    int index = 0;
+                    cJSON_ArrayForEach(rgb_element, element_target) {
+                        if(index < RGB_SIZE)
+                            rgb[index++] = rgb_element->valueint;
+                    }
+                    element_target = NULL;
+                }
+
+                // prepare the various multipliers
+                for (int i = 0; i < MULTIPLIER_SIZE; i++) {
+                    unsigned int p_i = (color_id * MULTIPLIER_SIZE * RGBA_SIZE) + (i * RGBA_SIZE);
+                    palette[p_i + 0] = (int) floor((double) rgb[0] * multipliers[i] / 255);
+                    palette[p_i + 1] = (int) floor((double) rgb[1] * multipliers[i] / 255);
+                    palette[p_i + 2] = (int) floor((double) rgb[2] * multipliers[i] / 255);
+                    palette[p_i + 3] = (color_id!=0)?255:0;
+                }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "usable");
+                if (element_target != NULL && cJSON_IsBool(element_target)){
+                    valid_id[color_id] = element_target->valueint;
+                    element_target = NULL;
+                }
+            }
+        }
+
+        palette_size = palette_index;
+        palette_o->palette_size = palette_size;
+        palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
+        valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
+        palette_o->palette = palette;
+        palette_o->valid_ids = valid_id;
+        palette_o->palette_id_names = palette_id_names;
+    }
+
+    cJSON_Delete(palette_json);
     return ret;
 }
 

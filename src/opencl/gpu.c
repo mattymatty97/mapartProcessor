@@ -948,3 +948,111 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *output
 
     return ret;
 }
+
+
+
+int gpu_height_to_block_count(gpu_t *gpu, unsigned int *input,
+                          unsigned int *id_count, unsigned int *layer_count, unsigned int *layer_id_count,
+                          unsigned int x, unsigned int y, unsigned int id_size, unsigned int max_height
+                          ) {
+    unsigned long input_size = x * y * 2;
+    unsigned long id_count_size = id_size;
+    unsigned long layer_count_size = max_height;
+    unsigned long layer_id_count_size = layer_count_size * max_height;
+
+    //iterate vertically for mc compatibility
+    size_t global_workgroup_size = x * y;
+    size_t local_workgroup_size = MIN(x, gpu->max_parallelism);
+    while (global_workgroup_size % local_workgroup_size != 0) { local_workgroup_size--; }
+
+    cl_event event;
+
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem id_count_mem_obj = NULL;
+    cl_mem layer_count_mem_obj = NULL;
+    cl_mem layer_id_count_mem_obj = NULL;
+
+    cl_kernel kernel = NULL;
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                                   input_size * sizeof(unsigned int), input, &ret);
+    if (ret == 0)
+        id_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                          id_count_size * sizeof(unsigned int), NULL, &ret);
+    if (ret == 0)
+        layer_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                             layer_count_size * sizeof(unsigned int), NULL, &ret);
+    if (ret == 0)
+        layer_id_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                                layer_id_count_size * sizeof(unsigned int), NULL, &ret);
+
+    //request clean the error indicator
+    unsigned int pattern = 0;
+
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, id_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_id_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+
+
+    //create kernel
+    if (ret == 0)
+        kernel = clCreateKernel(gpu->programs[1].program, "height_to_block_count", &ret);
+    unsigned char arg_index = 0;
+    //set kernel arguments
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &id_count_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_count_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_id_count_mem_obj);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &id_size);
+
+    //request the gpu process
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
+                                     0, NULL, &event);
+
+    //read the outputs
+
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, id_count_mem_obj, CL_TRUE, 0, id_count_size * sizeof(unsigned int),
+                                  id_count, 1, &event, &event);
+
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_count_mem_obj, CL_TRUE, 0, layer_count_size * sizeof(unsigned int),
+                                  layer_count, 1, &event, &event);
+
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_id_count_mem_obj, CL_TRUE, 0, layer_id_count_size * sizeof(unsigned int),
+                                  layer_id_count, 1, &event, &event);
+
+    if (ret == 0)
+        ret = clWaitForEvents(1, &event);
+
+    //flush remaining tasks
+    if (ret == 0)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (id_count_mem_obj != NULL)
+        clReleaseMemObject(id_count_mem_obj);
+    if (layer_count_mem_obj != NULL)
+        clReleaseMemObject(layer_count_mem_obj);
+    if (layer_id_count_mem_obj != NULL)
+        clReleaseMemObject(layer_id_count_mem_obj);
+
+    return ret;
+}

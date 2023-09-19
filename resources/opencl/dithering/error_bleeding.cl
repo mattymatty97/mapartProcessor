@@ -190,7 +190,7 @@ __kernel void Error_bleed_dither_by_cols(
             for(unsigned char p = 1; p < palette_indexes; p++){
                 //if (x == 0 && y == 0)
                 //    printf("palette %d has validity of %d\n", p, valid_palette_ids[p]);
-                if (valid_palette_ids[p] > 0)
+                if (valid_palette_ids[p])
                     for (unsigned char s = 0; s < 3; s++){
                         if (blacklisted_states[s]){
                                 continue;
@@ -238,7 +238,7 @@ __kernel void Error_bleed_dither_by_cols(
 
         //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", x , y, min_d[0], min_d[1], min_d[2], min_d[3]);
         //printf("Result Pixel %d %d is %d %d\n", x , y, (int)min_index ,(int)min_state);
-        vstore2((uchar2)(min_index,min_state), i, dst);
+        vstore2((uchar2)(min_index, min_state), i, dst);
 
         int error_index;
         int4 dst_error;

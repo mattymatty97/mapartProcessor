@@ -96,6 +96,11 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
 int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned int *result, unsigned int x,
                           unsigned int y, int max_minecraft_y);
 
+int gpu_height_to_block_count(gpu_t *gpu, unsigned int *input,
+                          unsigned int *id_count, unsigned int *layer_count, unsigned int *layer_id_count,
+                          unsigned int x, unsigned int y, unsigned int id_size, unsigned int max_height
+);
+
 #else
 #undef GPU_CODE_NO_RECURSION
 #endif

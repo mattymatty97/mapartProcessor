@@ -44,7 +44,7 @@ __kernel void palette_to_height(
 
     uchar2 first_pixel = vload2(0, src);
 
-    uint mc_height = (first_pixel[2] == 0)?1:0;
+    uint mc_height = 0;
 
     char direction = -1;
 
@@ -72,7 +72,7 @@ __kernel void palette_to_height(
 
             if ( direction == -SIGN(delta) ){
                 //staircase is changing direction
-                printf("Pixel (%d,%d) reset the staircase was %d blocks long\n", x, y, (y - start_index));
+                //printf("Pixel (%d,%d) reset the staircase was %d blocks long\n", x, y, (y - start_index));
                 start_index = y - 1;
                 direction = SIGN(delta);
             }
@@ -95,7 +95,7 @@ __kernel void palette_to_height(
                     
                     if (tmp >= 0 && ( max_mc_height < 0 || tmp < max_mc_height)){
 
-                        uint2 new_res = (old_res[0], convert_uint_sat(tmp));
+                        uint2 new_res = {old_res[0], convert_uint_sat(tmp)};
 
                         vstore2(new_res, tmp_i, dst);
 
@@ -113,8 +113,34 @@ __kernel void palette_to_height(
         }
 
         mc_height = convert_uint_sat(tmp_mc_height);
-
-        uint2 ret_pixel = (og_pixel[0], tmp_mc_height);
+        uint2 ret_pixel = {og_pixel[0], tmp_mc_height};
         vstore2(ret_pixel, i ,dst);
     }
+}
+
+
+__kernel void height_to_block_count(
+    __global const unsigned int   *In, 
+    __global const volatile uint  *Id_Count,
+    __global const volatile uint  *Layer_Count,
+    __global const volatile uint  *Layer_Id_Count,
+    const unsigned int id_size
+) {
+    // Get the index of the current element to be processed
+    unsigned int i = get_global_id(0);
+
+    uint2 pixel = vload2(i, In);
+
+    uint layer = pixel[1];
+    
+    uint id = pixel[0];
+
+    uint countIndex = (layer * id_size) + id;
+
+    atomic_add(&(Layer_Id_Count[countIndex]), 1);
+
+    atomic_add(&(Id_Count[id]), 1);
+    
+    atomic_add(&(Layer_Count[layer]), 1);
+
 }
