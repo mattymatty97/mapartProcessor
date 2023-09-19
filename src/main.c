@@ -3,8 +3,12 @@
 #include <getopt.h>
 #include <math.h>
 
-#define STB_IMAGE_IMPLEMENTATION
+#include "libs/alloc/tracked.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_MALLOC(sz)           t_malloc(sz)
+#define STBI_REALLOC(p, newsz)    t_realloc(p, newsz)
+#define STBI_FREE(p)              t_free(p)
 #include "libs/images/stb_image.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -72,6 +76,7 @@ typedef struct {
     char *palette_name;
     unsigned int palette_size;
     void  *palette;
+    char **palette_id_names;
     unsigned char *valid_ids;
 } mapart_palette;
 
@@ -91,8 +96,8 @@ typedef enum {
 
 void image_cleanup(void *image);
 void imagep_cleanup(void *image);
-void palette_cleanup(void *image);
-void imagep_cleanup(void *image);
+
+void palette_cleanup(void *palette);
 
 int load_image(image_data *image);
 
@@ -188,15 +193,15 @@ int main(int argc, char **argv) {
 
     image_data image = {};
 
-    image_int_data *int_image = calloc(1, sizeof(image_int_data));
-    image_float_data *float_image = calloc(1, sizeof(image_float_data));
+    image_int_data *int_image = t_calloc(1, sizeof(image_int_data));
+    image_float_data *float_image = t_calloc(1, sizeof(image_float_data));
 
     dither_algorithm dither = none;
 
     mapart_palette palette = {};
 
-    image_float_data *processed_image = NULL;
-    mapart_float_palette *processed_palette = NULL;
+    image_float_data processed_image = {};
+    mapart_float_palette processed_palette = {};
 
     if (ret == 0) {
         if (strcmp(config.dithering, "none") == 0) {
@@ -231,7 +236,7 @@ int main(int argc, char **argv) {
     //if everything is ok
     if (ret == 0) {
         //convert to int array for GPU compatibility
-        int_image->image_data = calloc(image.x * image.y * image.channels, sizeof(int));
+        int_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(int));
         int_image->x = image.x;
         int_image->y = image.y;
         int_image->channels = image.channels;
@@ -241,7 +246,7 @@ int main(int argc, char **argv) {
         }
 
         //convert to float array for GPU compatibility
-        float_image->image_data = calloc(image.x * image.y * image.channels, sizeof(float));
+        float_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
         float_image->x = image.x;
         float_image->y = image.y;
         float_image->channels = image.channels;
@@ -262,13 +267,13 @@ int main(int argc, char **argv) {
     //if we're still fine
     if (ret == 0) {
         //convert image to CIE-L*ab values + alpha
-        image_float_data *Lab_image = calloc(1, sizeof(image_float_data));
-        Lab_image->image_data = calloc(image.x * image.y * image.channels, sizeof(float));
+        image_float_data *Lab_image = &processed_image;
+        Lab_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
         Lab_image->x = image.x;
         Lab_image->y = image.y;
         Lab_image->channels = image.channels;
 
-        float *xyz_data = calloc(image.x * image.y * image.channels, sizeof(float));
+        float *xyz_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
 
         fprintf(stdout, "Converting image to XYZ\n");
         fflush(stdout);
@@ -279,21 +284,21 @@ int main(int argc, char **argv) {
             fflush(stdout);
             ret = gpu_xyz_to_lab(&config.gpu, xyz_data, Lab_image->image_data, image.x, image.y);
         }
-        free(xyz_data);
+        t_free(xyz_data);
 
         imagep_cleanup(&int_image);
-        processed_image = Lab_image;
 
         //convert palette to CIE-L*ab + alpha
         if (ret == 0) {
-            mapart_float_palette *Lab_palette = calloc(1, sizeof(mapart_float_palette));
-            Lab_palette->palette_name = strdup(palette.palette_name);
+            mapart_float_palette *Lab_palette = &processed_palette;
+            Lab_palette->palette_name = palette.palette_name;
+            Lab_palette->palette_id_names = palette.palette_id_names;
             Lab_palette->palette_size = palette.palette_size;
             Lab_palette->valid_ids = palette.valid_ids;
-            Lab_palette->palette = calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
+            Lab_palette->palette = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
 
 
-            float *palette_xyz_data = calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
+            float *palette_xyz_data = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
             fprintf(stdout, "Converting palette to XYZ\n");
             fflush(stdout);
             ret = gpu_rgb_to_xyz(&config.gpu, palette.palette, palette_xyz_data, MULTIPLIER_SIZE,palette.palette_size);
@@ -303,9 +308,7 @@ int main(int argc, char **argv) {
                 fflush(stdout);
                 ret = gpu_xyz_to_lab(&config.gpu, palette_xyz_data, Lab_palette->palette,MULTIPLIER_SIZE, palette.palette_size);
             }
-            free(palette_xyz_data);
-
-            processed_palette = Lab_palette;
+            t_free(palette_xyz_data);
         }
     }
 
@@ -319,7 +322,7 @@ int main(int argc, char **argv) {
     if (ret == 0) {
         fprintf(stdout, "Generate noise image\n");
         fflush(stdout);
-        float *noise = calloc(image.x * image.y, sizeof(float));
+        float *noise = t_calloc(image.x * image.y, sizeof(float));
 
         srand(config.random_seed);
 
@@ -350,10 +353,10 @@ int main(int argc, char **argv) {
             dither_func = &gpu_dither_SierraL;
         }
 
-        dithered_image.image_data = calloc(image.x * image.y * 2, sizeof(unsigned char));
-        ret = dither_func(&config.gpu, processed_image->image_data, dithered_image.image_data, processed_palette->palette, processed_palette->valid_ids, noise, image.x, image.y, palette.palette_size, config.maximum_height);
+        dithered_image.image_data = t_calloc(image.x * image.y * 2, sizeof(unsigned char));
+        ret = dither_func(&config.gpu, processed_image.image_data, dithered_image.image_data, processed_palette.palette, processed_palette.valid_ids, noise, image.x, image.y, palette.palette_size, config.maximum_height);
 
-        free(noise);
+        t_free(noise);
     }
 
     //save result
@@ -362,12 +365,15 @@ int main(int argc, char **argv) {
     }
 
     //convert from palette to block and height
-    image_uint_data mapart_data = {calloc(image.x * image.y * 2, sizeof (unsigned int)), image.x, image.y, 2};
+    image_uint_data mapart_data = {t_calloc(image.x * image.y * 2, sizeof (unsigned int)), image.x, image.y, 2};
     if (ret == 0) {
         fprintf(stdout, "Convert from palette to BlockId and height\n");
         fflush(stdout);
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, mapart_data.image_data, image.x, image.y, config.maximum_height);
     }
+
+    palette_cleanup(&processed_palette);
+    palette_cleanup(&palette);
 
     imagep_cleanup(&processed_image);
     image_cleanup(&mapart_data);
@@ -400,7 +406,7 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     int ret = 0;
     image_data converted_image = {NULL, dither_image->x, dither_image->y, 4};
 
-    converted_image.image_data = calloc(dither_image->x * dither_image->y * 4, sizeof(unsigned char));
+    converted_image.image_data = t_calloc(dither_image->x * dither_image->y * 4, sizeof(unsigned char));
 
     fprintf(stdout, "Convert dithered image back to rgb\n");
     fflush(stdout);
@@ -414,19 +420,17 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
         char *appendix = "";
 
         if (config.maximum_height == 0)
-            appendix = strdup("_flat");
+            appendix = "_flat";
         else if (config.maximum_height < 0)
-            appendix = strdup("_unlimited");
+            appendix = "_unlimited";
         else {
             char smallbuff[20] = {};
             sprintf(smallbuff, "_%d", config.maximum_height);
-            appendix = strdup(smallbuff);
+            appendix = smallbuff;
         }
 
         sprintf(&filename[7], "%s_%s%s.png", config.project_name, config.dithering, appendix);
         sprintf(&filename2[7], "%s_%s%s.mapart", config.project_name, config.dithering, appendix);
-
-        free(appendix);
 
         fprintf(stdout, "Save image\n");
         fflush(stdout);
@@ -442,7 +446,7 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
         }
     }
 
-    free(converted_image.image_data);
+    t_free(converted_image.image_data);
     return ret;
 }
 
@@ -482,8 +486,9 @@ int get_palette(mapart_palette *palette_o) {
 
             unsigned int   palette_index = 0;
             unsigned int   palette_size = 1;
-            int*           palette = calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
-            unsigned char* valid_id = calloc(1,sizeof (unsigned char));
+            int*           palette = t_calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
+            unsigned char* valid_id = t_calloc(1,sizeof (unsigned char));
+                    char** palette_id_names = t_calloc(1,sizeof (char*));
 
             //if object has color list
             if (bson_iter_init_find(&iter, &doc, "colors") &&
@@ -503,16 +508,18 @@ int get_palette(mapart_palette *palette_o) {
                         while (palette_size < (color_id + 1)) {
                             palette_size *= 2;
                         }
-                        palette = realloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE * sizeof(int));
-                        valid_id = realloc(valid_id, palette_size * sizeof(unsigned char));
-                        for (old_size; old_size < palette_size; old_size++){
-                            valid_id[old_size] = 0;
-                        }
+                        palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
+                        valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
+                        palette_id_names = t_recalloc(palette_id_names, palette_size , sizeof(char *));
                     }
 
                     if (palette_index < (color_id + 1) )
                         palette_index = (color_id + 1);
 
+                    if (bson_iter_recurse(&colors_iter, &entry) &&
+                    bson_iter_find(&entry, "name") && BSON_ITER_HOLDS_UTF8(&entry)) {
+                        palette_id_names[color_id] = strdup(bson_iter_utf8(&entry, NULL));
+                    }
 
                     bson_iter_t rgb_iter;
                     if (bson_iter_recurse(&colors_iter, &entry) &&
@@ -540,10 +547,11 @@ int get_palette(mapart_palette *palette_o) {
                 }
                 palette_size = palette_index;
                 palette_o->palette_size = palette_size;
-                palette = realloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE * sizeof(int));
-                valid_id = realloc(valid_id, palette_size * sizeof(unsigned char));
+                palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
+                valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
                 palette_o->palette = palette;
                 palette_o->valid_ids = valid_id;
+                palette_o->palette_id_names = palette_id_names;
             }
             printf("Palette loaded\n\n");
         }
@@ -557,22 +565,35 @@ int get_palette(mapart_palette *palette_o) {
 
 void image_cleanup(void *image) {
     if (((image_data *)image)->image_data != NULL)
-        free(((image_data *)image)->image_data);
+        t_free(((image_data *)image)->image_data);
 }
 
 void imagep_cleanup(void *image) {
     if (*((image_data **)image) != NULL) {
         if ((*((image_data **)image))->image_data != NULL)
-            free((*((image_data **)image))->image_data);
-        free(*((image_data **)image));
+            t_free((*((image_data **)image))->image_data);
+        t_free(*((image_data **)image));
         *((image_data **)image) = NULL;
     }
 }
 
 void palette_cleanup(void *palette){
     if ( *((mapart_palette **)palette) != NULL ){
-        free((*((mapart_palette **)palette))->palette);
-        free((*((mapart_palette **)palette))->palette_name);
-        free((*((mapart_palette **)palette))->valid_ids);
+        if ( (*((mapart_palette **)palette))->palette != NULL ) {
+            t_free((*((mapart_palette **) palette))->palette);
+            (*((mapart_palette **) palette))->palette = NULL;
+        }
+        if ( (*((mapart_palette **)palette))->palette_name != NULL ) {
+            t_free((*((mapart_palette **) palette))->palette_name);
+            (*((mapart_palette **) palette))->palette_name = NULL;
+        }
+        if ( (*((mapart_palette **)palette))->valid_ids != NULL ) {
+            t_free((*((mapart_palette **) palette))->valid_ids);
+            (*((mapart_palette **) palette))->valid_ids = NULL;
+        }
+        if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
+            t_free((*((mapart_palette **) palette))->palette_id_names);
+            (*((mapart_palette **) palette))->palette_id_names = NULL;
+        }
     }
 }
