@@ -73,8 +73,13 @@ __kernel void palette_to_height(
             if ( direction == -SIGN(delta) ){
                 //staircase is changing direction
                 //printf("Pixel (%d,%d) reset the staircase at %d was %d blocks long\n", x, y, mc_height, (y - start_index));
-                start_index = y - 1;
                 direction = SIGN(delta);
+                if (direction == -1){
+                    tmp_mc_height = 0;
+                    start_index = y;
+                }else{
+                    start_index = y - 1;
+                }
             }
 
             if (tmp_mc_height < 0 || ( max_mc_height > 0 && tmp_mc_height > max_mc_height)){

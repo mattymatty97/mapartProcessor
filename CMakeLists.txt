@@ -16,6 +16,3 @@ include_directories(mapartProcessor ${OpenCL_INCLUDE_DIRS})
 target_link_libraries(mapartProcessor PUBLIC ${OpenCL_LIBRARY})
 
 target_link_libraries(mapartProcessor PRIVATE -static)
-
-##define flag to only use first 3 multipliers
-add_definitions(-DMAPART_SURVIVAL)
