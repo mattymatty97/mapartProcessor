@@ -59,27 +59,6 @@ main_options config = {};
 
 //----------------DEFINITIONS---------------
 
-typedef struct {
-    void *image_data;
-    int x;
-    int y;
-    int channels;
-} image_data;
-
-typedef image_data image_int_data;
-
-typedef image_data image_uint_data;
-
-typedef image_data image_float_data;
-
-typedef struct {
-    char *palette_name;
-    unsigned int palette_size;
-    void  *palette;
-    char **palette_id_names;
-    unsigned char *valid_ids;
-} mapart_palette;
-
 typedef mapart_palette mapart_float_palette;
 
 typedef enum {
