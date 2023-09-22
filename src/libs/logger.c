@@ -9,12 +9,11 @@ typedef struct node {
 
 char loglist_init(log_list_t *logList) {
     logList->head = NULL;
-    logList->head = NULL;
+    logList->tail = NULL;
     logList->mutex = PTHREAD_MUTEX_INITIALIZER;
     logList->size = 0;
     return 0;
 }
-
 
 char loglist_append(log_list_t *logList, char *logline) {
     int ret = 0;

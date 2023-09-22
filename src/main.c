@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
+#include <stdbool.h>
 
 #include "libs/alloc/tracked.h"
 
@@ -58,8 +59,6 @@ main_options config = {};
 #define MULTIPLIER_SIZE 3
 
 //----------------DEFINITIONS---------------
-
-typedef mapart_palette mapart_float_palette;
 
 typedef enum {
     none,
@@ -217,26 +216,26 @@ int main(int argc, char **argv) {
     //if everything is ok
     if (ret == 0) {
         //convert to int array for GPU compatibility
-        int_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(int));
-        int_image->x = image.x;
-        int_image->y = image.y;
+        int_image->image_data = t_calloc(image.width * image.height * image.channels, sizeof(int));
+        int_image->width = image.width;
+        int_image->height = image.height;
         int_image->channels = image.channels;
 
-        for (int i = 0; i < (image.x * image.y * image.channels); i++) {
+        for (int i = 0; i < (image.width * image.height * image.channels); i++) {
             ((int*)int_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
         //convert to float array for GPU compatibility
-        float_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
-        float_image->x = image.x;
-        float_image->y = image.y;
+        float_image->image_data = t_calloc(image.width * image.height * image.channels, sizeof(float));
+        float_image->width = image.width;
+        float_image->height = image.height;
         float_image->channels = image.channels;
 
-        for (int i = 0; i < (image.x * image.y * image.channels); i++) {
+        for (int i = 0; i < (image.width * image.height * image.channels); i++) {
             ((int*)int_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
-        for (int i = 0; i < (image.x * image.y * image.channels); i++) {
+        for (int i = 0; i < (image.width * image.height * image.channels); i++) {
             ((float*)float_image->image_data)[i] = ((unsigned char*)image.image_data)[i];
         }
 
@@ -249,21 +248,21 @@ int main(int argc, char **argv) {
     if (ret == 0) {
         //convert image to CIE-L*ab values + alpha
         image_float_data *Lab_image = &processed_image;
-        Lab_image->image_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
-        Lab_image->x = image.x;
-        Lab_image->y = image.y;
+        Lab_image->image_data = t_calloc(image.width * image.height * image.channels, sizeof(float));
+        Lab_image->width = image.width;
+        Lab_image->height = image.height;
         Lab_image->channels = image.channels;
 
-        float *xyz_data = t_calloc(image.x * image.y * image.channels, sizeof(float));
+        float *xyz_data = t_calloc(image.width * image.height * image.channels, sizeof(float));
 
         fprintf(stdout, "Converting image to XYZ\n");
         fflush(stdout);
-        ret = gpu_rgb_to_xyz(&config.gpu, int_image->image_data, xyz_data, image.x, image.y);
+        ret = gpu_rgb_to_xyz(&config.gpu, int_image->image_data, xyz_data, image.width, image.height);
 
         if (ret == 0) {
             fprintf(stdout, "Converting image to CIE-L*ab\n");
             fflush(stdout);
-            ret = gpu_xyz_to_lab(&config.gpu, xyz_data, Lab_image->image_data, image.x, image.y);
+            ret = gpu_xyz_to_lab(&config.gpu, xyz_data, Lab_image->image_data, image.width, image.height);
         }
         t_free(xyz_data);
 
@@ -295,19 +294,19 @@ int main(int argc, char **argv) {
 
     image_data dithered_image = {
             NULL,
-            image.x,
-            image.y,
+            image.width,
+            image.height,
             2
     };
     //do dithering
     if (ret == 0) {
         fprintf(stdout, "Generate noise image\n");
         fflush(stdout);
-        float *noise = t_calloc(image.x * image.y, sizeof(float));
+        float *noise = t_calloc(image.width * image.height, sizeof(float));
 
         srand(config.random_seed);
 
-        for (int i = 0; i < image.x * image.y; i++)
+        for (int i = 0; i < image.width * image.height; i++)
             noise[i] = (float) rand() / (float) RAND_MAX;
         //noise[i] = 1;
 
@@ -334,8 +333,8 @@ int main(int argc, char **argv) {
             dither_func = &gpu_dither_SierraL;
         }
 
-        dithered_image.image_data = t_calloc(image.x * image.y * 2, sizeof(unsigned char));
-        ret = dither_func(&config.gpu, processed_image.image_data, dithered_image.image_data, processed_palette.palette, processed_palette.valid_ids, noise, image.x, image.y, palette.palette_size, config.maximum_height);
+        dithered_image.image_data = t_calloc(image.width * image.height * 2, sizeof(unsigned char));
+        ret = dither_func(&config.gpu, processed_image.image_data, dithered_image.image_data, processed_palette.palette, processed_palette.valid_ids, noise, image.width, image.height, palette.palette_size, config.maximum_height);
 
         t_free(noise);
     }
@@ -346,11 +345,11 @@ int main(int argc, char **argv) {
     }
 
     //convert from palette to block and height
-    image_uint_data mapart_data = {t_calloc(image.x * image.y * 2, sizeof (unsigned int)), image.x, image.y, 2};
+    image_uint_data mapart_data = {t_calloc(image.width * image.height * 2, sizeof (unsigned int)), image.width, image.height, 2};
     if (ret == 0) {
         fprintf(stdout, "Convert from palette to BlockId and height\n");
         fflush(stdout);
-        ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, mapart_data.image_data, image.x, image.y, config.maximum_height);
+        ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, mapart_data.image_data, image.width, image.height, config.maximum_height);
     }
 
     if (ret == 0) {
@@ -375,13 +374,13 @@ int load_image(image_data *image) {
     printf("Loading image\n");
     //load the image
     if (access(config.image_filename, F_OK) == 0 && access(config.image_filename, R_OK) == 0) {
-        image->image_data = stbi_load(config.image_filename, &image->x, &image->y, &image->channels, 4);
+        image->image_data = stbi_load(config.image_filename, &image->width, &image->height, &image->channels, 4);
         if (image->image_data == NULL) {
             fprintf(stderr, "Failed to load image %s:\n%s\n", config.image_filename, stbi_failure_reason());
             return 13;
         }
         image->channels = 4;
-        printf("Image loaded: %dx%d(%d)\n\n", image->x, image->y, image->channels);
+        printf("Image loaded: %dx%d(%d)\n\n", image->width, image->height, image->channels);
         return 0;
     } else {
         fprintf(stderr, "Failed to load image %s:\nFile does not exists\n", config.image_filename);
@@ -391,15 +390,15 @@ int load_image(image_data *image) {
 
 int save_image(mapart_palette *palette, image_data *dither_image) {
     int ret = 0;
-    image_data converted_image = {NULL, dither_image->x, dither_image->y, 4};
+    image_data converted_image = {NULL, dither_image->width, dither_image->height, 4};
 
-    converted_image.image_data = t_calloc(dither_image->x * dither_image->y * 4, sizeof(unsigned char));
+    converted_image.image_data = t_calloc(dither_image->width * dither_image->height * 4, sizeof(unsigned char));
 
     fprintf(stdout, "Convert dithered image back to rgb\n");
     fflush(stdout);
 
     ret = gpu_palette_to_rgb(&config.gpu, dither_image->image_data, palette->palette,
-                             converted_image.image_data, dither_image->x, dither_image->y, palette->palette_size, MULTIPLIER_SIZE);
+                             converted_image.image_data, dither_image->width, dither_image->height, palette->palette_size, MULTIPLIER_SIZE);
 
     char filename[1000] = "images/";
     if (ret == 0) {
@@ -419,7 +418,7 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
 
         fprintf(stdout, "Save image\n");
         fflush(stdout);
-        ret = stbi_write_png(filename, converted_image.x, converted_image.y, converted_image.channels,
+        ret = stbi_write_png(filename, converted_image.width, converted_image.height, converted_image.channels,
                              converted_image.image_data, 0);
         if (ret == 0) {
             fprintf(stderr, "Failed to save image %s:\n%s\n", filename, stbi_failure_reason());
@@ -435,7 +434,6 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     return ret;
 }
 
-
 int save_stats(mapart_palette *palette, image_uint_data *mapart_image) {
     int ret = 0;
     int height = config.maximum_height;
@@ -447,7 +445,7 @@ int save_stats(mapart_palette *palette, image_uint_data *mapart_image) {
     unsigned int *layer_count     = t_calloc(height                         , sizeof (unsigned int));
     unsigned int *layer_id_count  = t_calloc(palette->palette_size * height , sizeof (unsigned int));
 
-    ret = gpu_height_to_block_count(&config.gpu, mapart_image->image_data, id_count, layer_count, layer_id_count, mapart_image->x, mapart_image->y, palette->palette_size, height);
+    ret = gpu_height_to_block_count(&config.gpu, mapart_image->image_data, id_count, layer_count, layer_id_count, mapart_image->width, mapart_image->height, palette->palette_size, height);
 
     if (ret == 0){
         char filename[100] = "images/";
@@ -555,6 +553,8 @@ int get_palette(mapart_palette *palette_o) {
         int*           palette = t_calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
         unsigned char* valid_id = t_calloc(1,sizeof (unsigned char));
         char** palette_id_names = t_calloc(1,sizeof (char*));
+        unsigned char* is_supported = t_calloc(1,sizeof (unsigned char));
+        char** palette_block_ids = t_calloc(1,sizeof (char*));
 
         target = cJSON_GetObjectItemCaseSensitive(palette_json, "colors");
         if (target != NULL && cJSON_IsArray(target)){
@@ -579,6 +579,8 @@ int get_palette(mapart_palette *palette_o) {
                     palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
                     valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
                     palette_id_names = t_recalloc(palette_id_names, palette_size , sizeof(char *));
+                    is_supported = t_recalloc(is_supported, palette_size,sizeof (unsigned char));
+                    palette_block_ids = t_recalloc(palette_block_ids, palette_size,sizeof (char*));
                 }
 
                 if (palette_index < (color_id + 1) )
@@ -615,6 +617,18 @@ int get_palette(mapart_palette *palette_o) {
                     valid_id[color_id] = element_target->valueint;
                     element_target = NULL;
                 }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "block_id");
+                if (element_target != NULL && cJSON_IsString(element_target)){
+                    palette_block_ids[color_id] = t_strdup(element_target->string);
+                    element_target = NULL;
+                }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "needs_support");
+                if (element_target != NULL && cJSON_IsBool(element_target)){
+                    is_supported[color_id] = element_target->valueint;
+                    element_target = NULL;
+                }
             }
         }
 
@@ -625,6 +639,8 @@ int get_palette(mapart_palette *palette_o) {
         palette_o->palette = palette;
         palette_o->valid_ids = valid_id;
         palette_o->palette_id_names = palette_id_names;
+        palette_o->palette_block_ids = palette_block_ids;
+        palette_o->is_supported = is_supported;
     }
 
     cJSON_Delete(palette_json);
@@ -651,15 +667,32 @@ void palette_cleanup(void *palette){
             t_free((*((mapart_palette **) palette))->palette);
             (*((mapart_palette **) palette))->palette = NULL;
         }
+
         if ( (*((mapart_palette **)palette))->palette_name != NULL ) {
             t_free((*((mapart_palette **) palette))->palette_name);
             (*((mapart_palette **) palette))->palette_name = NULL;
         }
+
         if ( (*((mapart_palette **)palette))->valid_ids != NULL ) {
             t_free((*((mapart_palette **) palette))->valid_ids);
             (*((mapart_palette **) palette))->valid_ids = NULL;
         }
+
+        if ( (*((mapart_palette **)palette))->is_supported != NULL ) {
+            t_free((*((mapart_palette **) palette))->is_supported);
+            (*((mapart_palette **) palette))->is_supported = NULL;
+        }
+
         if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
+            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
+                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
+            t_free((*((mapart_palette **) palette))->palette_id_names);
+            (*((mapart_palette **) palette))->palette_id_names = NULL;
+        }
+
+        if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
+            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
+                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
             t_free((*((mapart_palette **) palette))->palette_id_names);
             (*((mapart_palette **) palette))->palette_id_names = NULL;
         }

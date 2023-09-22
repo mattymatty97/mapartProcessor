@@ -24,9 +24,9 @@ typedef struct {
 } main_options;
 
 typedef struct {
-    void* image_data;
-    int x;
-    int y;
+    void *image_data;
+    int width;
+    int height;
     int channels;
 } image_data;
 
@@ -37,11 +37,15 @@ typedef image_data image_uint_data;
 typedef image_data image_float_data;
 
 typedef struct {
-    char* palette_name;
+    char *palette_name;
     unsigned int palette_size;
-    void* palette;
-    char** palette_id_names;
-    unsigned char* valid_ids;
+    void  *palette;
+    char **palette_id_names;
+    char **palette_block_ids;
+    unsigned char *is_supported;
+    unsigned char *valid_ids;
 } mapart_palette;
+
+typedef mapart_palette mapart_float_palette;
 
 #endif
