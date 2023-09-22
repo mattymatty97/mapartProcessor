@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
+#include <stdbool.h>
 
 #include "libs/alloc/tracked.h"
 
@@ -58,29 +59,6 @@ main_options config = {};
 #define MULTIPLIER_SIZE 3
 
 //----------------DEFINITIONS---------------
-
-typedef struct {
-    void *image_data;
-    int width;
-    int height;
-    int channels;
-} image_data;
-
-typedef image_data image_int_data;
-
-typedef image_data image_uint_data;
-
-typedef image_data image_float_data;
-
-typedef struct {
-    char *palette_name;
-    unsigned int palette_size;
-    void  *palette;
-    char **palette_id_names;
-    unsigned char *valid_ids;
-} mapart_palette;
-
-typedef mapart_palette mapart_float_palette;
 
 typedef enum {
     none,
@@ -456,7 +434,6 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     return ret;
 }
 
-
 int save_stats(mapart_palette *palette, image_uint_data *mapart_image) {
     int ret = 0;
     int height = config.maximum_height;
@@ -576,6 +553,8 @@ int get_palette(mapart_palette *palette_o) {
         int*           palette = t_calloc(1 * MULTIPLIER_SIZE * RGBA_SIZE,sizeof (int));
         unsigned char* valid_id = t_calloc(1,sizeof (unsigned char));
         char** palette_id_names = t_calloc(1,sizeof (char*));
+        unsigned char* is_supported = t_calloc(1,sizeof (unsigned char));
+        char** palette_block_ids = t_calloc(1,sizeof (char*));
 
         target = cJSON_GetObjectItemCaseSensitive(palette_json, "colors");
         if (target != NULL && cJSON_IsArray(target)){
@@ -600,6 +579,8 @@ int get_palette(mapart_palette *palette_o) {
                     palette = t_recalloc(palette, palette_size * MULTIPLIER_SIZE * RGBA_SIZE , sizeof(int));
                     valid_id = t_recalloc(valid_id, palette_size , sizeof(unsigned char));
                     palette_id_names = t_recalloc(palette_id_names, palette_size , sizeof(char *));
+                    is_supported = t_recalloc(is_supported, palette_size,sizeof (unsigned char));
+                    palette_block_ids = t_recalloc(palette_block_ids, palette_size,sizeof (char*));
                 }
 
                 if (palette_index < (color_id + 1) )
@@ -636,6 +617,18 @@ int get_palette(mapart_palette *palette_o) {
                     valid_id[color_id] = element_target->valueint;
                     element_target = NULL;
                 }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "block_id");
+                if (element_target != NULL && cJSON_IsString(element_target)){
+                    palette_block_ids[color_id] = t_strdup(element_target->string);
+                    element_target = NULL;
+                }
+
+                element_target = cJSON_GetObjectItemCaseSensitive(element, "needs_support");
+                if (element_target != NULL && cJSON_IsBool(element_target)){
+                    is_supported[color_id] = element_target->valueint;
+                    element_target = NULL;
+                }
             }
         }
 
@@ -646,6 +639,8 @@ int get_palette(mapart_palette *palette_o) {
         palette_o->palette = palette;
         palette_o->valid_ids = valid_id;
         palette_o->palette_id_names = palette_id_names;
+        palette_o->palette_block_ids = palette_block_ids;
+        palette_o->is_supported = is_supported;
     }
 
     cJSON_Delete(palette_json);
@@ -672,15 +667,32 @@ void palette_cleanup(void *palette){
             t_free((*((mapart_palette **) palette))->palette);
             (*((mapart_palette **) palette))->palette = NULL;
         }
+
         if ( (*((mapart_palette **)palette))->palette_name != NULL ) {
             t_free((*((mapart_palette **) palette))->palette_name);
             (*((mapart_palette **) palette))->palette_name = NULL;
         }
+
         if ( (*((mapart_palette **)palette))->valid_ids != NULL ) {
             t_free((*((mapart_palette **) palette))->valid_ids);
             (*((mapart_palette **) palette))->valid_ids = NULL;
         }
+
+        if ( (*((mapart_palette **)palette))->is_supported != NULL ) {
+            t_free((*((mapart_palette **) palette))->is_supported);
+            (*((mapart_palette **) palette))->is_supported = NULL;
+        }
+
         if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
+            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
+                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
+            t_free((*((mapart_palette **) palette))->palette_id_names);
+            (*((mapart_palette **) palette))->palette_id_names = NULL;
+        }
+
+        if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
+            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
+                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
             t_free((*((mapart_palette **) palette))->palette_id_names);
             (*((mapart_palette **) palette))->palette_id_names = NULL;
         }
