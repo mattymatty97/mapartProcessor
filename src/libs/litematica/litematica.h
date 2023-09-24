@@ -11,3 +11,10 @@ typedef struct {
 	int mc_data;
 	int litematica;
 } version_indeces;
+
+typedef struct {
+	uint8_t block_id;
+	uint16_t x;
+	uint16_t y;
+	uint16_t z;
+} block_pos_data;

@@ -1,70 +1,197 @@
+#include <stdbool.h>
+
 #include "litematica.h"
 #include "libs/globaldefs.h"
 #include "tagutils.h";
 #include "libs/alloc/tracked.h"
 
-void litematica_create(char* author, char* description, char* litematic_name, char* file_name, map_size size, version_indeces version_info, mapart_palette* block_palette, char* support_block, image_uint_data* block_data) {
-	char buffer[1000] = {};
+/// <summary>
+/// Compares 2 block_pos_data objects, sorting by y, then x, then z
+/// </summary>
+/// <returns>- 1 if v1 &lt; v2<para/>+1 if v1 > v2<para/>0 if v1 == v2</returns>
+int block_pos_data_compare(const void* v1, const void* v2)
+{
+	const block_pos_data* p1 = (block_pos_data*)v1;
+	const block_pos_data* p2 = (block_pos_data*)v2;
+	if (p1->y < p2->y)
+		return -1;
+	else if (p1->y > p2->y)
+		return +1;
+	else if (p1->z < p2->z)
+		return -1;
+	else if (p1->z > p2->z)
+		return +1;
+	else if (p1->x < p2->x)
+		return -1;
+	else if (p1->x > p2->x)
+		return +1;
+	else
+		return 0;
+}
+
+char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* block_data, uint8_t** new_palette_id_map, int* new_palette_len) {
+	// Create an array to store the string values of the new condensed block palette
+	// The palette is padded in the front with air
+	char** new_block_palette = t_calloc(block_palette->palette_size + 1, sizeof(char*));
+	new_block_palette[0] = "minecraft:air";
+	new_block_palette[1] = block_palette->support_block;
+	*new_palette_len = 2;
+	// Create an array to use as a map to relate original block_ids to new condensed block_ids to reduce palette size
+	// Assumes the support_block id will be 255
+	*new_palette_id_map = t_calloc(256, sizeof(uint8_t));
+
+	unsigned int cur_block_id;
+	unsigned int* iter = block_data->image_data;
+	for (int i = 0; i < block_data->width * block_data->height; i++) {
+		cur_block_id = *iter;
+		if (cur_block_id != UCHAR_MAX && (*new_palette_id_map)[cur_block_id] == 0) {
+			// If the block_id has not been seen before, add the block name to the new palette and initialize the id in new_palette_block_ids
+			new_block_palette[*new_palette_len] = block_palette->palette_block_ids[cur_block_id];
+			(*new_palette_id_map)[cur_block_id] = *new_palette_len;
+			(*new_palette_len)++;
+		}
+		iter += 2; // Add 2 because there are 2 channels in block_data->image_data
+	}
+
+	return new_block_palette;
+}
+
+/// <summary>
+/// Checks if the y values in the block data need to be shifted up by 1 due to support blocks
+/// </summary>
+/// <param name="block_palette">the block palette being used for which block ids need support</param>
+/// <param name="block_data">the block data of the mapart</param>
+/// <returns>True if there is any block at height 0 which requires support<para/>False otherwise</returns>
+bool is_upwards_shift_needed(mapart_palette* block_palette, image_uint_data* block_data) {
+	unsigned int cur_block_id;
+	unsigned int cur_height;
+	unsigned int* iter = block_data->image_data;
+	for (int i = 0; i < block_data->width * block_data->height; i++) {
+		cur_block_id = *iter;
+		cur_height = *(iter + 1);
+
+		if (cur_height == 0 && block_palette->is_supported[cur_block_id])
+			return true;
+	}
+	return false;
+}
+
+block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_uint_data* block_data, int* supported_block_data_len) {
+	// Create an array to store all the new block data including the supporting blocks
+	// Each block stores its block_id and its x, y, and z positions relative to the mapart origin
+	// Size allocated to the array is double the size of incoming block_data to account for worst-case scenario of all blocks requiring support
+	block_pos_data* supported_block_data = t_calloc((int64_t)block_data->width * block_data->height * 2, sizeof(block_pos_data));
+
+	int upwards_shift = is_upwards_shift_needed(block_palette, block_data);
+
+	*supported_block_data_len = 0;
+	unsigned int* in_iter = block_data->image_data;
+	block_pos_data* out_iter = supported_block_data;
+
+	unsigned int cur_block_id;
+	unsigned int cur_height;
+	for (int x = 0; x < block_data->width; x++) {
+		for (int z = 0; z < block_data->height; z++) {
+			cur_block_id = *in_iter;
+			cur_height = *(in_iter + 1) + upwards_shift;
+
+			// Add the block data to the new array
+			out_iter->block_id = cur_block_id;
+			out_iter->x = x;
+			out_iter->y = cur_height;
+			out_iter->z = z;
+
+			(*supported_block_data_len)++;
+			in_iter += 2; // Add 2 because there are 2 channels in block_data->image_data
+			out_iter++;
+
+			// Add support block underneath if required
+			if (block_palette->is_supported[cur_block_id]) {
+				out_iter->block_id = 1; // Support block_id is always 1
+				out_iter->x = x;
+				out_iter->y = cur_height - 1;
+				out_iter->z = z;
+
+				(*supported_block_data_len)++;
+				out_iter++;
+			}
+		}
+	}
+}
+
+void litematica_create(char* author, char* description, char* litematic_name, char* file_name, map_size size, version_indeces version_info, mapart_palette* block_palette, image_uint_data* block_data) {
+	char buffer[1000] = { 0 };
+
+	// Get the new palette to use for the blocks
+	uint8_t* new_palette_id_map;
+	int new_palette_len;
+	char** new_block_palette = get_new_block_palette(block_palette, block_data, &new_palette_id_map, &new_palette_len);
+
+	int supported_block_data_len;
+	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, &supported_block_data);
+
+	// Sort the new block data by y, then x, then z
+	qsort(supported_block_data, supported_block_data_len, sizeof(block_pos_data), block_pos_data_compare);
 
 	nbt_tag_t* tagTop = create_compound_tag("");
 	{
 		nbt_tag_t* tagMeta = create_compound_tag("Metadata");
 		{
-			nbt_tag_t* tagEncSize = create_child_compound_tag("EnclosingSize", NULL);
+			nbt_tag_t* tagEncSize = create_compound_tag("EnclosingSize");
 			{
-				create_int_tag("x", size.x_length, tagEncSize);
-				create_int_tag("y", size.y_length, tagEncSize);
-				create_int_tag("z", size.z_length + 1, tagEncSize);
+				create_child_int_tag("x", size.x_length, tagEncSize);
+				create_child_int_tag("y", size.y_length, tagEncSize);
+				create_child_int_tag("z", size.z_length + 1, tagEncSize);
 			}
-			close_compound_tag(tagEncSize, tagMeta);
-			create_string_tag("Author", author, tagMeta);
-			create_string_tag("Description", description, tagMeta);
-			create_string_tag("Name", litematic_name, tagMeta);
-			create_int_tag("RegionCount", 1, tagMeta);
-			create_long_tag("TimeCreated", time(0), tagMeta);
-			create_long_tag("TimeModified", time(0), tagMeta);
-			create_int_tag("TotalBlocks", BLOCK_ARRAY_SIZE, tagMeta);
-			create_int_tag("TotalVolume", BLOCK_ARRAY_SIZE, tagMeta);
+			add_tag_to_compound_parent(tagEncSize, tagMeta);
+
+			create_child_string_tag("Author", author, tagMeta);
+			create_child_string_tag("Description", description, tagMeta);
+			create_child_string_tag("Name", litematic_name, tagMeta);
+			create_child_int_tag("RegionCount", 1, tagMeta);
+			create_child_long_tag("TimeCreated", time(0), tagMeta);
+			create_child_long_tag("TimeModified", time(0), tagMeta);
+			create_child_int_tag("TotalBlocks", supported_block_data_len, tagMeta);
+			create_child_int_tag("TotalVolume", size.x_length * size.y_length * (size.z_length + 1), tagMeta);
 		}
-		close_compound_tag(tagMeta, tagTop);
-		nbt_tag_t* tagRegions = create_child_compound_tag("Regions", NULL);
+		add_tag_to_compound_parent(tagMeta, tagTop);
+
+		nbt_tag_t* tagRegions = create_compound_tag("Regions");
 		{
-			nbt_tag_t* tagMain = create_child_compound_tag(litematic_name, NULL);
+			nbt_tag_t* tagMain = create_compound_tag(litematic_name);
 			{
-				nbt_tag_t* tagPos = create_child_compound_tag("Position", NULL);
+				nbt_tag_t* tagPos = create_compound_tag("Position");
 				{
-					create_int_tag("x", 0, tagPos);
-					create_int_tag("y", 0, tagPos);
-					create_int_tag("z", 0, tagPos);
+					create_child_int_tag("x", 0, tagPos);
+					create_child_int_tag("y", 0, tagPos);
+					create_child_int_tag("z", 0, tagPos);
 				}
-				close_compound_tag(tagPos, tagMain);
-				nbt_tag_t* tagSize = create_child_compound_tag("Size", NULL);
+				add_tag_to_compound_parent(tagPos, tagMain);
+
+				nbt_tag_t* tagSize = create_compound_tag("Size");
 				{
-					create_int_tag("x", size.x_length, tagSize);
-					create_int_tag("y", size.y_length, tagSize);
-					create_int_tag("z", size.z_length + 1, tagSize);
+					create_child_int_tag("x", size.x_length, tagSize);
+					create_child_int_tag("y", size.y_length, tagSize);
+					create_child_int_tag("z", size.z_length + 1, tagSize);
 				}
-				close_compound_tag(tagSize, tagMain);
-				nbt_tag_t* tagPalette = create_list_tag("BlockStatePalette", NBT_TYPE_COMPOUND, NULL);
+				add_tag_to_compound_parent(tagSize, tagMain);
+				
+				nbt_tag_t* tagPalette = create_list_tag("BlockStatePalette", NBT_TYPE_COMPOUND);
 				{
-					nbt_tag_t* tagPalAir = create_child_compound_tag("", NULL);
-					{
-						create_string_tag("Name", "minecraft:air", tagPalAir);
-					}
-					close_list_tag(tagPalAir, tagPalette);
-					for (int i = 0; i < block_palette_size; i++) {
-						nbt_tag_t* tagPal = create_child_compound_tag("", NULL);
+					for (int i = 0; i < new_palette_len; i++) {
+						nbt_tag_t* tagBlockInPalette = create_compound_tag("");
 						{
-							create_string_tag("Name", block_palette_used[i], tagPal);
+							create_child_string_tag("Name", new_block_palette[i], tagBlockInPalette);
 						}
-						close_list_tag(tagPal, tagPalette);
+						add_tag_to_list_parent(tagBlockInPalette, tagPalette);
 					}
 				}
-				close_compound_tag(tagPalette, tagMain);
-				create_list_tag("Entities", NBT_TYPE_COMPOUND, tagMain);
-				create_list_tag("PendingBlockTicks", NBT_TYPE_COMPOUND, tagMain);
-				create_list_tag("PendingFluidTicks", NBT_TYPE_COMPOUND, tagMain);
-				create_list_tag("TileEntities", NBT_TYPE_COMPOUND, tagMain);
+				add_tag_to_compound_parent(tagPalette, tagMain);
+
+				create_child_list_tag("Entities", NBT_TYPE_COMPOUND, tagMain);
+				create_child_list_tag("PendingBlockTicks", NBT_TYPE_COMPOUND, tagMain);
+				create_child_list_tag("PendingFluidTicks", NBT_TYPE_COMPOUND, tagMain);
+				create_child_list_tag("TileEntities", NBT_TYPE_COMPOUND, tagMain);
 
 				int64_t* longArr = t_malloc(sizeof(int64_t) * BLOCK_ARRAY_SIZE);
 				int64_t* Bits = longArr;
@@ -140,23 +267,19 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 					}
 				}
 
-				create_long_array_tag("BlockStates", longArr, BLOCK_ARRAY_SIZE, tagMain);
+				create_child_long_array_tag("BlockStates", longArr, BLOCK_ARRAY_SIZE, tagMain);
 
 				t_free(longArr);
 			}
-			close_compound_tag(tagMain, tagRegions);
+			add_tag_to_compound_parent(tagMain, tagRegions);
 		}
-		close_compound_tag(tagRegions, tagTop);
+		add_tag_to_compound_parent(tagRegions, tagTop);
 
-		create_int_tag("MinecraftDataVersion", version_info.mc_data, tagTop);
-		create_int_tag("Version", version_info.litematica, tagTop);
+		create_child_int_tag("MinecraftDataVersion", version_info.mc_data, tagTop);
+		create_child_int_tag("Version", version_info.litematica, tagTop);
 	}
 
 	sprintf(buffer, "%s.litematic", file_name);
 
 	write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
-}
-
-int temp(mapart_palette* block_palette, unsigned int* block_palette_counts) {
-
 }

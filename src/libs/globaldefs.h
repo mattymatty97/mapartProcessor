@@ -42,6 +42,7 @@ typedef struct {
     void  *palette;
     char **palette_id_names;
     char **palette_block_ids;
+    char *support_block;
     unsigned char *is_supported;
     unsigned char *valid_ids;
 } mapart_palette;
