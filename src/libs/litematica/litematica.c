@@ -126,7 +126,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 
 	int upwards_shift = is_upwards_shift_needed(block_palette, stats);
 	int supported_block_data_len;
-	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, upwards_shift, &supported_block_data, &supported_block_data_len);
+	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, upwards_shift, &supported_block_data_len);
 
 	// Sort the new block data by y, then x, then z
 	qsort(supported_block_data, supported_block_data_len, sizeof(block_pos_data), block_pos_data_compare);
@@ -282,5 +282,5 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 
 	sprintf(buffer, "%s.litematic", file_name);
 
-	write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
+	//write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
 }
