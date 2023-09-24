@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <time.h>
 
 #include "litematica.h"
 #include "libs/globaldefs.h"
@@ -39,12 +40,13 @@ char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* blo
 	// Create an array to use as a map to relate original block_ids to new condensed block_ids to reduce palette size
 	// Assumes the support_block id will be 255
 	*new_palette_id_map = t_calloc(256, sizeof(uint8_t));
+	(*new_palette_id_map)[UCHAR_MAX] = 1;
 
-	unsigned int cur_block_id;
 	unsigned int* iter = block_data->image_data;
+	unsigned int cur_block_id;
 	for (int i = 0; i < block_data->width * block_data->height; i++) {
 		cur_block_id = *iter;
-		if (cur_block_id != UCHAR_MAX && (*new_palette_id_map)[cur_block_id] == 0) {
+		if ((*new_palette_id_map)[cur_block_id] == 0) {
 			// If the block_id has not been seen before, add the block name to the new palette and initialize the id in new_palette_block_ids
 			new_block_palette[*new_palette_len] = block_palette->palette_block_ids[cur_block_id];
 			(*new_palette_id_map)[cur_block_id] = *new_palette_len;
@@ -60,29 +62,24 @@ char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* blo
 /// Checks if the y values in the block data need to be shifted up by 1 due to support blocks
 /// </summary>
 /// <param name="block_palette">the block palette being used for which block ids need support</param>
-/// <param name="block_data">the block data of the mapart</param>
+/// <param name="stats">the stats of the mapart</param>
 /// <returns>True if there is any block at height 0 which requires support<para/>False otherwise</returns>
-bool is_upwards_shift_needed(mapart_palette* block_palette, image_uint_data* block_data) {
-	unsigned int cur_block_id;
-	unsigned int cur_height;
-	unsigned int* iter = block_data->image_data;
-	for (int i = 0; i < block_data->width * block_data->height; i++) {
-		cur_block_id = *iter;
-		cur_height = *(iter + 1);
+bool is_upwards_shift_needed(mapart_palette* block_palette, mapart_stats* stats) {
+	unsigned int cur_block_count;
+	for (int i = 0; i < block_palette->palette_size; i++) {
+		cur_block_count = stats->layer_id_count[i]; // Assumes that the y0 layer is the first layer
 
-		if (cur_height == 0 && block_palette->is_supported[cur_block_id])
+		if (cur_block_count != 0 && block_palette->is_supported[i])
 			return true;
 	}
 	return false;
 }
 
-block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_uint_data* block_data, int* supported_block_data_len) {
+block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_uint_data* block_data, int upwards_shift, int* supported_block_data_len) {
 	// Create an array to store all the new block data including the supporting blocks
 	// Each block stores its block_id and its x, y, and z positions relative to the mapart origin
 	// Size allocated to the array is double the size of incoming block_data to account for worst-case scenario of all blocks requiring support
 	block_pos_data* supported_block_data = t_calloc((int64_t)block_data->width * block_data->height * 2, sizeof(block_pos_data));
-
-	int upwards_shift = is_upwards_shift_needed(block_palette, block_data);
 
 	*supported_block_data_len = 0;
 	unsigned int* in_iter = block_data->image_data;
@@ -107,7 +104,7 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 
 			// Add support block underneath if required
 			if (block_palette->is_supported[cur_block_id]) {
-				out_iter->block_id = 1; // Support block_id is always 1
+				out_iter->block_id = UCHAR_MAX; // Support block_id is always 255
 				out_iter->x = x;
 				out_iter->y = cur_height - 1;
 				out_iter->z = z;
@@ -119,7 +116,7 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 	}
 }
 
-void litematica_create(char* author, char* description, char* litematic_name, char* file_name, map_size size, version_indeces version_info, mapart_palette* block_palette, image_uint_data* block_data) {
+void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_indeces version_info, mapart_palette* block_palette, image_uint_data* block_data) {
 	char buffer[1000] = { 0 };
 
 	// Get the new palette to use for the blocks
@@ -127,11 +124,15 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	int new_palette_len;
 	char** new_block_palette = get_new_block_palette(block_palette, block_data, &new_palette_id_map, &new_palette_len);
 
+	int upwards_shift = is_upwards_shift_needed(block_palette, stats);
 	int supported_block_data_len;
-	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, &supported_block_data);
+	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, upwards_shift, &supported_block_data, &supported_block_data_len);
 
 	// Sort the new block data by y, then x, then z
 	qsort(supported_block_data, supported_block_data_len, sizeof(block_pos_data), block_pos_data_compare);
+
+	stats->y_length += upwards_shift;
+	uint32_t mapart_volume = (uint32_t)stats->x_length * stats->y_length * stats->z_length;
 
 	nbt_tag_t* tagTop = create_compound_tag("");
 	{
@@ -139,9 +140,9 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 		{
 			nbt_tag_t* tagEncSize = create_compound_tag("EnclosingSize");
 			{
-				create_child_int_tag("x", size.x_length, tagEncSize);
-				create_child_int_tag("y", size.y_length, tagEncSize);
-				create_child_int_tag("z", size.z_length + 1, tagEncSize);
+				create_child_int_tag("x", stats->x_length, tagEncSize);
+				create_child_int_tag("y", stats->y_length, tagEncSize);
+				create_child_int_tag("z", stats->z_length, tagEncSize);
 			}
 			add_tag_to_compound_parent(tagEncSize, tagMeta);
 
@@ -152,7 +153,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 			create_child_long_tag("TimeCreated", time(0), tagMeta);
 			create_child_long_tag("TimeModified", time(0), tagMeta);
 			create_child_int_tag("TotalBlocks", supported_block_data_len, tagMeta);
-			create_child_int_tag("TotalVolume", size.x_length * size.y_length * (size.z_length + 1), tagMeta);
+			create_child_int_tag("TotalVolume", mapart_volume, tagMeta);
 		}
 		add_tag_to_compound_parent(tagMeta, tagTop);
 
@@ -170,9 +171,9 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 
 				nbt_tag_t* tagSize = create_compound_tag("Size");
 				{
-					create_child_int_tag("x", size.x_length, tagSize);
-					create_child_int_tag("y", size.y_length, tagSize);
-					create_child_int_tag("z", size.z_length + 1, tagSize);
+					create_child_int_tag("x", stats->x_length, tagSize);
+					create_child_int_tag("y", stats->y_length, tagSize);
+					create_child_int_tag("z", stats->z_length, tagSize);
 				}
 				add_tag_to_compound_parent(tagSize, tagMain);
 				
@@ -193,7 +194,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 				create_child_list_tag("PendingFluidTicks", NBT_TYPE_COMPOUND, tagMain);
 				create_child_list_tag("TileEntities", NBT_TYPE_COMPOUND, tagMain);
 
-				int64_t* longArr = t_malloc(sizeof(int64_t) * BLOCK_ARRAY_SIZE);
+				/*int64_t* longArr = t_malloc(sizeof(int64_t) * BLOCK_ARRAY_SIZE);
 				int64_t* Bits = longArr;
 				*Bits = 0;
 				char bitIndex = 0;
@@ -267,9 +268,9 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 					}
 				}
 
-				create_child_long_array_tag("BlockStates", longArr, BLOCK_ARRAY_SIZE, tagMain);
+				create_child_long_array_tag("BlockStates", longArr, mapart_volume, tagMain);
 
-				t_free(longArr);
+				t_free(longArr);*/
 			}
 			add_tag_to_compound_parent(tagMain, tagRegions);
 		}

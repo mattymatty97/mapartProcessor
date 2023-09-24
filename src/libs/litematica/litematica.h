@@ -5,7 +5,8 @@ typedef struct {
 	int x_length;
 	int y_length;
 	int z_length;
-} map_size;
+	unsigned int* layer_id_count;
+} mapart_stats;
 
 typedef struct {
 	int mc_data;
