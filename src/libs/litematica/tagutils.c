@@ -1,4 +1,5 @@
 #include "tagutils.h"
+#include "nbt.h"
 
 void set_tag_name(nbt_tag_t* tag, char* name) {
 	nbt_set_tag_name(tag, name, strlen(name));
