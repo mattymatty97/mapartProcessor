@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/${CMAKE_BUILD_TYPE}/")
 
 find_package(OpenCL REQUIRED)
+find_package(ZLIB REQUIRED)
 
 include_directories(src)
 file(GLOB_RECURSE SOURCES RELATIVE ${CMAKE_SOURCE_DIR} "src/*.c")
@@ -14,5 +15,8 @@ add_executable(mapartProcessor ${SOURCES})
 
 include_directories(mapartProcessor ${OpenCL_INCLUDE_DIRS})
 target_link_libraries(mapartProcessor PUBLIC ${OpenCL_LIBRARY})
+target_link_libraries(mapartProcessor PUBLIC ZLIB::ZLIB)
 
 target_link_libraries(mapartProcessor PRIVATE -static)
+
+add_definitions(-DNBT_OWN_ZLIB="zlib.h")

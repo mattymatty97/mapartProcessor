@@ -1,4 +1,5 @@
 //constants
+#define LIQUID_DEPTH (int3)(10,5,1)
 
 #define WHT_L 1.8f
 
@@ -69,6 +70,7 @@ __kernel void Error_bleed_dither_by_cols(
                   __global float         *err_buf,     
                   __global float         *Palette,
                   __global uchar         *valid_palette_ids,
+                  __global uchar         *liquid_palette_ids,
                   __global float         *noise,
                   __global uint          *workgroup_rider, 
                   __global volatile uint *workgroup_progress,
@@ -99,6 +101,7 @@ __kernel void Error_bleed_dither_by_cols(
 
     
     int curr_mc_height = 0;
+    uint height_padding = 0;
 
     for (int y = 0; y < (height); y++)
     {
@@ -143,14 +146,21 @@ __kernel void Error_bleed_dither_by_cols(
 
         bool valid = false;
 
-        bool blacklisted_states[4] = {};
+        bool blacklisted_states[3] = {};
+        bool blacklisted_liquid_states[3] = {};
 
         if (max_mc_height == 0){
             blacklisted_states[0] = true;
             blacklisted_states[2] = true;
+            blacklisted_liquid_states[0] = true;
+            blacklisted_liquid_states[1] = true;
+        }else {
+            for(char i = 0; i < 3; i++){
+                if (LIQUID_DEPTH[i] > max_mc_height)
+                    blacklisted_liquid_states[i] = true;
+            }
         }
 
-        
         int tmp_mc_height = 0;
 
         uint abs_mc_height = abs(curr_mc_height);
@@ -192,7 +202,7 @@ __kernel void Error_bleed_dither_by_cols(
                 //    printf("palette %d has validity of %d\n", p, valid_palette_ids[p]);
                 if (valid_palette_ids[p])
                     for (unsigned char s = 0; s < 3; s++){
-                        if (blacklisted_states[s]){
+                        if ( ( ( liquid_palette_ids[p] ) ? (blacklisted_liquid_states[s]) : (blacklisted_states[s]) ) ){
                                 continue;
                         }
                         int palette_index = p * 3 + s;
@@ -214,27 +224,43 @@ __kernel void Error_bleed_dither_by_cols(
 
             char delta = min_state - 1;
             if (max_mc_height > 0 && min_index != 0){
-                //if we're changing direction reset to 0
-                if ( SIGN(delta) == - SIGN(curr_mc_height) ){
-                    tmp_mc_height = delta;
-                    //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
-                }else
-                    tmp_mc_height = curr_mc_height + delta;
-                
-                valid = abs(tmp_mc_height) < max_mc_height;
+                if (liquid_palette_ids[min_index]){
+                    printf("Pixel %d %d choose water %d\n", x , y, min_state);
+                    //if this is a liquid
+                    valid = true;
+                    tmp_mc_height = 0;
+                }else{
+                    //if we're changing direction reset to 0
+                    if ( SIGN(delta) == - SIGN(curr_mc_height) ){
+                        tmp_mc_height = delta;
+                        //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
+                    }else
+                        tmp_mc_height = curr_mc_height  + ( (SIGN(curr_mc_height)>0)?height_padding:0 ) + delta;
 
-                if (!valid){
-                    blacklisted_states[min_state] = true;
-                    if ( noise[i] > 0.5f)
-                        blacklisted_states[1] = true;
-                    printf("Pixel %d %d reached %d: Restricted\n", x , y, tmp_mc_height);
+                    valid = abs( tmp_mc_height ) < max_mc_height;
+                    if (!valid){
+                        blacklisted_states[min_state] = true;
+                        if ( noise[i] > 0.5f)
+                            blacklisted_states[1] = true;
+                        printf("Pixel %d %d reached %d: Restricted\n", x , y, tmp_mc_height);
+                    }
                 }
+
+
             }else{
                 valid = true;
             }
         }
 
         curr_mc_height = tmp_mc_height;
+
+        if (liquid_palette_ids[min_index]){
+            printf("2 Pixel %d %d choose water %d\n", x , y, min_state);
+            height_padding = LIQUID_DEPTH[min_state];
+        }else{
+            //printf("2 Pixel %d %d choose something else\n", x , y, min_state);
+            height_padding = 0;
+        }
 
         //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", x , y, min_d[0], min_d[1], min_d[2], min_d[3]);
         //printf("Result Pixel %d %d is %d %d\n", x , y, (int)min_index ,(int)min_state);

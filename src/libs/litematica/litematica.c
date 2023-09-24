@@ -3,7 +3,7 @@
 
 #include "litematica.h"
 #include "libs/globaldefs.h"
-#include "tagutils.h";
+#include "tagutils.h"
 #include "libs/alloc/tracked.h"
 
 /// <summary>
