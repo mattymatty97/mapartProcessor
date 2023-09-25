@@ -193,7 +193,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 				create_child_list_tag("PendingBlockTicks", NBT_TYPE_COMPOUND, tagMain);
 				create_child_list_tag("PendingFluidTicks", NBT_TYPE_COMPOUND, tagMain);
 				create_child_list_tag("TileEntities", NBT_TYPE_COMPOUND, tagMain);
-
+                /*
 				int64_t* longArr = t_malloc(sizeof(int64_t) * BLOCK_ARRAY_SIZE);
 				int64_t* Bits = longArr;
 				*Bits = 0;
@@ -271,6 +271,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 				create_child_long_array_tag("BlockStates", longArr, mapart_volume, tagMain);
 
 				t_free(longArr);
+                */
 			}
 			add_tag_to_compound_parent(tagMain, tagRegions);
 		}

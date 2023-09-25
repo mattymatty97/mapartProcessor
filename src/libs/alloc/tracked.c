@@ -109,9 +109,10 @@ void t_free(void* ptr)
         reorder();
         track_last--;
     }
-
+    /*
     if (tracker == NULL && ptr != NULL)
         printf("%p not tracked, maybe was already freed\n", ptr);
+    */
 }
 
 int t_isTracked(void* ptr)

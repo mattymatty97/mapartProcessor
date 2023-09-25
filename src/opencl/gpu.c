@@ -855,9 +855,9 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
 // mapart
 
 int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_liquid, unsigned int *output,unsigned char palette_size, unsigned int width,
-                          unsigned int height, int max_minecraft_y) {
+                          unsigned int height, int max_minecraft_y, unsigned int* computed_max_minecraft_y) {
     size_t buffer_size = (size_t)width * height * 2;
-    size_t output_size = (size_t)width * height * 3;
+    size_t output_size = (size_t)width * (height + 1) * 3;
     //iterate vertically for mc compatibility
     size_t global_workgroup_size = width;
     size_t local_workgroup_size = MIN(width, gpu->max_parallelism);
@@ -871,6 +871,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     cl_mem workgroup_rider_mem_obj = NULL;
     cl_mem error_mem_obj = NULL;
     cl_mem output_mem_obj = NULL;
+    cl_mem max_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
     //create memory objects
@@ -891,6 +892,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     if (ret == 0)
         error_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                  sizeof(unsigned int), NULL, &ret);
+    if (ret == 0)
+        max_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,sizeof(unsigned int), NULL, &ret);
 
     //request clean the error indicator
     unsigned int pattern = 0;
@@ -899,6 +902,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
     if (ret == 0)
         ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+    if (ret == 0)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
 
 
     //create kernel
@@ -922,6 +927,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &height);
     if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
+    if (ret == 0)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &max_mem_obj);
 
     //request the gpu process
     if (ret == 0)
@@ -938,6 +945,10 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         fprintf(stderr, "Kernel returned error!\n");
         ret = error_status;
     }
+
+    if (ret == 0)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, max_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
+                                  computed_max_minecraft_y, 1, &event, &event);
 
     if (ret == 0)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned int),
@@ -963,114 +974,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         clReleaseMemObject(workgroup_rider_mem_obj);
     if (error_mem_obj != NULL)
         clReleaseMemObject(error_mem_obj);
-
-    return ret;
-}
-
-
-
-int gpu_height_to_block_count(gpu_t *gpu, unsigned int *input,
-                          unsigned int *id_count, unsigned int *layer_count, unsigned int *layer_id_count,
-                          unsigned int width, unsigned int height, unsigned int id_size, unsigned int max_height
-                          ) {
-    size_t input_size = (size_t)width * height * 2;
-    size_t id_count_size = id_size;
-    size_t layer_count_size = max_height;
-    size_t layer_id_count_size = id_size * max_height;
-
-    //iterate vertically for mc compatibility
-    size_t global_workgroup_size = (size_t)width * height;
-    size_t local_workgroup_size = MIN(width, gpu->max_parallelism);
-    while (global_workgroup_size % local_workgroup_size != 0) { local_workgroup_size--; }
-
-    cl_event event;
-
-    cl_int ret = 0;
-    cl_mem input_mem_obj = NULL;
-    cl_mem id_count_mem_obj = NULL;
-    cl_mem layer_count_mem_obj = NULL;
-    cl_mem layer_id_count_mem_obj = NULL;
-
-    cl_kernel kernel = NULL;
-
-    //create memory objects
-
-    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-                                   input_size * sizeof(unsigned int), input, &ret);
-    if (ret == 0)
-        id_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                          id_count_size * sizeof(unsigned int), NULL, &ret);
-    if (ret == 0)
-        layer_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                             layer_count_size * sizeof(unsigned int), NULL, &ret);
-    if (ret == 0)
-        layer_id_count_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                                layer_id_count_size * sizeof(unsigned int), NULL, &ret);
-
-    //request clean the error indicator
-    unsigned int pattern = 0;
-
-    if (ret == 0)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, id_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
-    if (ret == 0)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
-    if (ret == 0)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_id_count_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
-
-
-    //create kernel
-    if (ret == 0)
-        kernel = clCreateKernel(gpu->programs[1].program, "height_to_block_count", &ret);
-    unsigned char arg_index = 0;
-    //set kernel arguments
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &id_count_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_count_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_id_count_mem_obj);
-    if (ret == 0)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &id_size);
-
-    //request the gpu process
-    if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
-                                     0, NULL, &event);
-
-    //read the outputs
-
-    if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, id_count_mem_obj, CL_TRUE, 0, id_count_size * sizeof(unsigned int),
-                                  id_count, 1, &event, &event);
-
-    if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_count_mem_obj, CL_TRUE, 0, layer_count_size * sizeof(unsigned int),
-                                  layer_count, 1, &event, &event);
-
-    if (ret == 0)
-        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_id_count_mem_obj, CL_TRUE, 0, layer_id_count_size * sizeof(unsigned int),
-                                  layer_id_count, 1, &event, &event);
-
-    if (ret == 0)
-        ret = clWaitForEvents(1, &event);
-
-    //flush remaining tasks
-    if (ret == 0)
-        ret = clFlush(gpu->commandQueue);
-
-    if (kernel != NULL)
-        clReleaseKernel(kernel);
-
-    if (input_mem_obj != NULL)
-        clReleaseMemObject(input_mem_obj);
-    if (id_count_mem_obj != NULL)
-        clReleaseMemObject(id_count_mem_obj);
-    if (layer_count_mem_obj != NULL)
-        clReleaseMemObject(layer_count_mem_obj);
-    if (layer_id_count_mem_obj != NULL)
-        clReleaseMemObject(layer_id_count_mem_obj);
+    if (max_mem_obj != NULL)
+        clReleaseMemObject(max_mem_obj);
 
     return ret;
 }

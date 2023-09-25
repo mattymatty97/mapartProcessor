@@ -17,17 +17,21 @@ __kernel void palette_to_rgb(__global const unsigned char  *In, __global const i
 
 #define SIGN(x) ((x > 0) - (x < 0))
 
+//constants
+#define LIQUID_DEPTH (int3)(10,5,1)
 
 //kernel
 
 __kernel void palette_to_height(
-                  __global uchar         *src,      
+                  __global uchar         *src,
+                  __global uchar         *liquid_palette_ids,
                   __global uint          *dst,
                   __global uint          *workgroup_rider,
                   __global uint          *error,
                   const uint              width,
                   const uint              height,
-                  const int               max_mc_height)
+                  const int               max_mc_height,
+                  __global uint          *computed_max)
 {
     __local volatile uint        workgroup_number;
 
@@ -46,106 +50,103 @@ __kernel void palette_to_height(
 
     uint mc_height = 0;
 
-    char direction = -1;
-
     uint start_index = 0;
+    
+    uint start_padding = -1;
 
-    for (uint y = 0; y < (height) && atomic_add(error, 0) == 0; y++)
+    //iterate on the row
+    for (uint y = 0; ( y < (height) ) && ! (*error); y++)
     {
-        uint i = (width * y) + x;
+        uint i            = (width * y) + x;
+        
+        uint o            = (width * (y + 1)) + x;
 
-        uchar2 og_pixel = vload2(i, src);
+        uchar2 og_pixel   = vload2(i, src);
 
-        char delta = og_pixel[1] - 1;
-        // 0 1 2
-        // -1 0 1
-        //printf("Pixel (%d,%d) delta is %d and sign is %d\n", x, y, delta, SIGN(delta));
+        uchar block_id    = og_pixel[0];
 
-        long tmp_mc_height = (long)mc_height + delta;
+        uchar block_state = og_pixel[1];
 
-        if (og_pixel[0] == 0){
-            start_index = y;
-            delta = 0;
-            tmp_mc_height = mc_height;
+        if (y == 0){
+            if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 1){
+                vstore3((uint3){UCHAR_MAX,0,0}, x ,dst);
+            }else if (block_state == 0){
+                vstore3((uint3){UCHAR_MAX,1,1}, x ,dst);
+            }else if (block_state == 2){
+                vstore3((uint3){UCHAR_MAX,0,0}, x ,dst);
+                mc_height  = 1;
+            }
         }
-        else{
 
-            if ( direction == -SIGN(delta) ){
-                //staircase is changing direction
-                //printf("Pixel (%d,%d) reset the staircase at %d was %d blocks long\n", x, y, mc_height, (y - start_index));
-                direction = SIGN(delta);
-                if (direction == -1){
-                    tmp_mc_height = 0;
-                    start_index = y;
-                }else{
-                    start_index = y - 1;
-                }
+        char delta        = block_state - 1;
+
+        long bottom_block = mc_height + delta;
+        long top_block    = mc_height + delta;
+
+        if (block_id == 0){
+            //if is transparent
+            bottom_block  = 0;
+            top_block     = 0;
+            start_index   = y;
+            start_padding = 0;
+        }else if (liquid_palette_ids[block_id]){
+            //if it is liquid
+            bottom_block  = 0;
+            top_block     = LIQUID_DEPTH[block_state];
+            start_index   = y;
+            start_padding = 0;
+        }else{
+
+            if (SIGN(mc_height) == -SIGN(delta)){
+                //if we're changing direction ( was staircase up and now is down )
+                //drop down to y0
+                bottom_block  = 0;
+                top_block     = 0;
+                //set this as start of the downards staircase
+                start_index   = y;
+                //tell that it is possible to raise the block bofore if we reach it's height
+                start_padding = -1;
             }
 
-            if (tmp_mc_height < 0 || ( max_mc_height > 0 && tmp_mc_height > max_mc_height)){
-    /*
-                if (delta < 0){
-                    printf("Pixel (%d,%d) shifted %d blocks Up\n", x, y, (y - start_index));
-                }else{
-                    printf("Pixel (%d,%d) shifted %d blocks Down\n", x, y, (y - start_index));
-                }
-    */
-                for (uint tmp_y = start_index; tmp_y < y && atomic_add(error, 0) == 0; tmp_y++){
-                    
-                    uint tmp_i = (width * tmp_y) + x;
+            if (bottom_block < 0 || (max_mc_height > 0 && top_block > max_mc_height)){
+                //if the block would be out of the world
+                //check if we are touching another block
+                uint tmp_y = start_index;
+                uint tmp_o = (width * ( tmp_y + 1 + start_padding)) + x;
+                uint3 o_pixel = vload3(tmp_o, dst);
 
-                    uint2 old_res = vload2(tmp_i ,dst);
+                //if we are shift the loop to include it too
+                if (o_pixel[2] >= top_block - 1)
+                    tmp_y += start_index;
 
-                    long tmp = old_res[1] - delta;
-                    
-                    if (tmp >= 0 && ( max_mc_height < 0 || tmp < max_mc_height)){
+                //loop over the entire staircase
+                for (;tmp_y < y && !(*error) ; tmp_y++){
+                    tmp_o = (width * (tmp_y + 1)) + x;
+                    o_pixel = vload3(tmp_o, dst);
 
-                        uint2 new_res = {old_res[0], tmp};
+                    //shift the staircase to accomodate the new block
+                    o_pixel[1] -= delta;
+                    o_pixel[2] -= delta;
 
-                        vstore2(new_res, tmp_i, dst);
-
-                    }else{
-
-                        printf("Error: Pixel (%d,%d) crashed a staircase y:%d\n", x, y, tmp);
+                    //check if we are pushing the staircase out of the world
+                    if (o_pixel[1] < 0 || (max_mc_height > 0 && o_pixel[2] > max_mc_height)){
+                        printf("Error: Pixel (%d,%d) crashed a staircase y:%d-%d\n", x, y, o_pixel[1], o_pixel[2]);
                         atomic_add(error, 1);
-
+                    }else{
+                        //save the new positions
+                        vstore3(o_pixel, tmp_o, dst);
                     }
                 }
-
-                tmp_mc_height -= delta;
+                
+                //we have moved by
+                bottom_block -= delta;
+                top_block    -= delta;
 
             }
         }
-
-        mc_height = tmp_mc_height;
-        uint2 ret_pixel = {og_pixel[0], tmp_mc_height};
-        vstore2(ret_pixel, i ,dst);
+        mc_height = top_block;
+        atomic_max(computed_max, mc_height);
+        uint3 ret_pixel = {block_id, bottom_block, top_block};
+        vstore3(ret_pixel, o ,dst);
     }
-}
-
-
-__kernel void height_to_block_count(
-    __global const unsigned int   *In, 
-    __global const volatile uint  *Id_Count,
-    __global const volatile uint  *Layer_Count,
-    __global const volatile uint  *Layer_Id_Count,
-    const unsigned int id_size
-) {
-    // Get the index of the current element to be processed
-    unsigned int i = get_global_id(0);
-
-    uint2 pixel = vload2(i, In);
-
-    uint layer = pixel[1];
-    
-    uint id = pixel[0];
-
-    uint countIndex = (layer * id_size) + id;
-
-    atomic_add(&(Layer_Id_Count[countIndex]), 1);
-
-    atomic_add(&(Id_Count[id]), 1);
-    
-    atomic_add(&(Layer_Count[layer]), 1);
-
 }
