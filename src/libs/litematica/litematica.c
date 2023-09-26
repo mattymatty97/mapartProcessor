@@ -1,13 +1,26 @@
 #include <stdbool.h>
 #include <time.h>
+#include <math.h>
 
 #include "litematica.h"
 #include "libs/globaldefs.h"
 #include "tagutils.h"
 #include "libs/alloc/tracked.h"
 
+// TODO: Note to self: need to add mushroom stem checks if they are next to each other (will be pain because of palette changes needed)
+
 /// <summary>
-/// Compares 2 block_pos_data objects, sorting by y, then x, then z
+/// Stores data for a given block
+/// </summary>
+typedef struct {
+	uint8_t block_id; // The block id this block has
+	int16_t x; // The x coord of this block
+	int16_t y; // The y coord of this block
+	int16_t z; // The z coord of this block
+} block_pos_data;
+
+/// <summary>
+/// Compares 2 block_pos_data objects, sorting by y, then z, then x
 /// </summary>
 /// <returns>- 1 if v1 &lt; v2<para/>+1 if v1 > v2<para/>0 if v1 == v2</returns>
 int block_pos_data_compare(const void* v1, const void* v2)
@@ -52,7 +65,7 @@ char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* blo
 			(*new_palette_id_map)[cur_block_id] = *new_palette_len;
 			(*new_palette_len)++;
 		}
-		iter += 2; // Add 2 because there are 2 channels in block_data->image_data
+		iter += 3; // Add 3 because there are 3 channels in block_data->image_data
 	}
 
 	return new_block_palette;
@@ -99,7 +112,7 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 			out_iter->z = z;
 
 			(*supported_block_data_len)++;
-			in_iter += 2; // Add 2 because there are 2 channels in block_data->image_data
+			in_iter += 3; // Add 3 because there are 3 channels in block_data->image_data
 			out_iter++;
 
 			// Add support block underneath if required
@@ -116,7 +129,75 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 	}
 }
 
-void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_indeces version_info, mapart_palette* block_palette, image_uint_data* block_data) {
+int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_len, mapart_stats* stats, int block_palette_len, uint8_t* new_block_palette_id_map, int* bit_packed_block_data_len) {
+	int bits_per_block = log2(block_palette_len) + 1;
+	bit_packed_block_data_len = (int)ceil(stats->volume * bits_per_block / 64.0);
+	int64_t* bit_packed_block_data = t_calloc(bit_packed_block_data_len, sizeof(int64_t));
+
+	int64_t* curr_bit_section = bit_packed_block_data; // The 64-bit section that is currently being written to
+	int section_index = 0; // The index in the 64-bit section that we are at, from right to left
+	int section_bits_left = 64; // The number of bits left to be written to the current section
+	block_pos_data prev_block = { 0, 0, 0, 0 };
+
+	uint64_t block_id, air_gap;
+	for (int i = 0; i < block_data_len; i++) {
+		block_id = new_block_palette_id_map[block_data[i].block_id];
+		air_gap = (uint64_t)(block_data[i].x - prev_block.x)
+				+ (uint64_t)(block_data[i].z - prev_block.z) * stats->x_length
+				+ (uint64_t)(block_data[i].y - prev_block.y) * stats->x_length * stats->z_length
+				- 1;
+
+		if (air_gap > 0) {
+			uint64_t air_bits = air_gap * bits_per_block;
+
+			// If the air bits are smaller than the remaining bits in the current section
+			if (section_bits_left > air_bits) {
+				section_index += air_bits;
+				section_bits_left -= air_bits;
+			}
+			// If the air bits completely fill up the current section
+			else if (section_bits_left == air_bits) {
+				curr_bit_section++;
+				section_index = 0;
+				section_bits_left = 64;
+			}
+			// If the air bits are greater than the remaining bits in the current section
+			else {
+				air_bits -= section_bits_left; // Remove the bits remaining for the current section
+				curr_bit_section += air_bits >> 6; // Shift the current section forward
+				section_index = air_bits - air_bits >> 6; // Set the current section's index to the number of air bits remaining after the section shift
+				section_bits_left = 64 - section_index;
+			}
+		}
+
+		// Very similar logic as above
+		if (section_bits_left > bits_per_block) {
+			*curr_bit_section |= block_id << section_index;
+			section_index += bits_per_block;
+			section_bits_left -= bits_per_block;
+		}
+		else if (section_bits_left == bits_per_block) {
+			*curr_bit_section |= block_id << section_index;
+			curr_bit_section++;
+			section_index = 0;
+			section_bits_left = 64;
+		}
+		else {
+			*curr_bit_section |= block_id << section_index;
+			curr_bit_section++;
+			*curr_bit_section |= block_id >> section_bits_left;
+			section_index = 0;
+			section_bits_left = 64;
+		}
+		
+		prev_block = block_data[i];
+	}
+
+	return bit_packed_block_data;
+}
+
+void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data) {
+	// Buffer for string manipulation
 	char buffer[1000] = { 0 };
 
 	// Get the new palette to use for the blocks
@@ -124,15 +205,17 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	int new_palette_len;
 	char** new_block_palette = get_new_block_palette(block_palette, block_data, &new_palette_id_map, &new_palette_len);
 
+	// Add the support blocks to the block data and reorganize it into a block_pos_data array
 	int upwards_shift = is_upwards_shift_needed(block_palette, stats);
 	int supported_block_data_len;
 	block_pos_data* supported_block_data = get_supported_block_data(block_palette, block_data, upwards_shift, &supported_block_data_len);
 
-	// Sort the new block data by y, then x, then z
+	// Sort the new block data by y, then z, then x
 	qsort(supported_block_data, supported_block_data_len, sizeof(block_pos_data), block_pos_data_compare);
 
+	// Update the height of the mapart if necessary and calculate the total volume
 	stats->y_length += upwards_shift;
-	uint32_t mapart_volume = (uint32_t)stats->x_length * stats->y_length * stats->z_length;
+	stats->volume = (uint64_t)stats->x_length * stats->y_length * stats->z_length;
 
 	nbt_tag_t* tagTop = create_compound_tag("");
 	{
@@ -150,10 +233,10 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 			create_child_string_tag("Description", description, tagMeta);
 			create_child_string_tag("Name", litematic_name, tagMeta);
 			create_child_int_tag("RegionCount", 1, tagMeta);
-			create_child_long_tag("TimeCreated", time(0), tagMeta);
+			create_child_long_tag("TimeCreated", time(0), tagMeta); // Set the time created & modified to the current time
 			create_child_long_tag("TimeModified", time(0), tagMeta);
 			create_child_int_tag("TotalBlocks", supported_block_data_len, tagMeta);
-			create_child_int_tag("TotalVolume", mapart_volume, tagMeta);
+			create_child_int_tag("TotalVolume", stats->volume, tagMeta);
 		}
 		add_tag_to_compound_parent(tagMeta, tagTop);
 
@@ -179,6 +262,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 				
 				nbt_tag_t* tagPalette = create_list_tag("BlockStatePalette", NBT_TYPE_COMPOUND);
 				{
+					// Add all the blocks in the palette
 					for (int i = 0; i < new_palette_len; i++) {
 						nbt_tag_t* tagBlockInPalette = create_compound_tag("");
 						{
@@ -194,83 +278,11 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 				create_child_list_tag("PendingFluidTicks", NBT_TYPE_COMPOUND, tagMain);
 				create_child_list_tag("TileEntities", NBT_TYPE_COMPOUND, tagMain);
 
-				int64_t* longArr = t_malloc(sizeof(int64_t) * BLOCK_ARRAY_SIZE);
-				int64_t* Bits = longArr;
-				*Bits = 0;
-				char bitIndex = 0;
-				char longBitIndex = 0;
-
-				int y = 0;
-				while (y != NBT_Y && Layers[y].size() == 0) {
-					y++;
-				}
-				short Prev[3] = { -1, 0, 0 };
-
-				for (y; y != NBT_Y; y++) {
-					for (std::vector<std::array<short, 3>>::iterator it = Layers[y].begin(); it != Layers[y].end(); it++) {
-						int limit = it->at(0) - Prev[0] - 1 + (it->at(1) - Prev[1]) * NBT_X + (y - Prev[2]) * NBT_XZ;
-
-						if (limit >= 32 - bitIndex) {
-							limit -= 32 - bitIndex;
-							Bits += 1 + (bitIndex < 22) + (bitIndex < 11);
-							bitIndex = 0;
-							longBitIndex = 0;
-						}
-
-						int shift = limit >> 5;
-						Bits += 3 * shift;
-						limit -= shift << 5;
-
-						if (limit > (unsigned char)(21 - bitIndex)) {
-							limit -= 22 - bitIndex;
-							Bits += 1 + (bitIndex < 11);
-							bitIndex = 22;
-							longBitIndex = 4;
-						}
-						else if (limit > (unsigned char)(10 - bitIndex)) {
-							limit -= 11 - bitIndex;
-							Bits++;
-							bitIndex = 11;
-							longBitIndex = 2;
-						}
-						bitIndex += limit;
-						longBitIndex += blockBits * limit;
-
-
-						*Bits = *Bits | ((((int64_t)it->at(2) >> 2) + 1) << longBitIndex);
-						bitIndex++;
-						longBitIndex += blockBits;
-
-						switch (bitIndex) {
-						case 11:
-							Bits++;
-							*Bits = ((it->at(2) >> 2) + 1) >> 4;
-							longBitIndex = 2;
-							break;
-						case 22:
-							Bits++;
-							*Bits = ((it->at(2) >> 2) + 1) >> 2;
-							longBitIndex = 4;
-							break;
-						case 32:
-							Bits++;
-							*Bits = 0;
-							bitIndex = 0;
-							longBitIndex = 0;
-							break;
-						default:
-							break;
-						}
-
-						Prev[0] = it->at(0);
-						Prev[1] = it->at(1);
-						Prev[2] = y;
-					}
-				}
-
-				create_child_long_array_tag("BlockStates", longArr, mapart_volume, tagMain);
-
-				t_free(longArr);
+				// Get the block data bit-packed into a long array and add it
+				int bit_packed_block_data_len;
+				int64_t* bit_packed_block_data = get_bit_packed_block_data(supported_block_data, supported_block_data_len, stats, new_palette_len, new_palette_id_map, &bit_packed_block_data_len);
+				create_child_long_array_tag("BlockStates", bit_packed_block_data, bit_packed_block_data_len, tagMain);
+				t_free(bit_packed_block_data);
 			}
 			add_tag_to_compound_parent(tagMain, tagRegions);
 		}
@@ -280,7 +292,12 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 		create_child_int_tag("Version", version_info.litematica, tagTop);
 	}
 
-	sprintf(buffer, "%s.litematic", file_name);
+	// Free the allocated memory
+	t_free(new_block_palette);
+	t_free(new_palette_id_map);
+	t_free(supported_block_data);
 
-	//write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
+	// Save the litematic
+	sprintf(buffer, "%s.litematic", file_name);
+	write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
 }

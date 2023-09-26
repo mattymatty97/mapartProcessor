@@ -1,6 +1,9 @@
 #include "tagutils.h"
 #include "nbt.h"
 
+/// <summary>
+/// Sets the name of the tag to the given name
+/// </summary>
 void set_tag_name(nbt_tag_t* tag, char* name) {
 	nbt_set_tag_name(tag, name, strlen(name));
 }
@@ -71,4 +74,22 @@ void add_tag_to_compound_parent(nbt_tag_t* tag, nbt_tag_t* parent) {
 
 void add_tag_to_list_parent(nbt_tag_t* tag, nbt_tag_t* parent) {
 	nbt_tag_list_append(parent, tag);
+}
+
+/// <summary>
+/// Returns the file writer specified by the given parameters
+/// </summary>
+static size_t writer_write(void* userdata, uint8_t* data, size_t size) {
+	return fwrite(data, 1, size, (FILE*)userdata);
+}
+
+void write_nbt_file(const char* filename, nbt_tag_t* tag, int flags) {
+	FILE* file = fopen(filename, "wb");
+	nbt_writer_t writer;
+
+	writer.write = writer_write;
+	writer.userdata = file;
+
+	nbt_write(writer, tag, flags);
+	fclose(file);
 }
