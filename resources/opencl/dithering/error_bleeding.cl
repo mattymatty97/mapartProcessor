@@ -101,7 +101,6 @@ __kernel void Error_bleed_dither_by_cols(
 
     
     int curr_mc_height = 0;
-    uint height_padding = 0;
 
     for (int y = 0; y < (height); y++)
     {
@@ -227,25 +226,23 @@ __kernel void Error_bleed_dither_by_cols(
                 if (liquid_palette_ids[min_index]){
                     printf("Pixel %d %d choose water %d\n", x , y, min_state);
                     //if this is a liquid
-                    valid = true;
-                    tmp_mc_height = 0;
+                    tmp_mc_height = LIQUID_DEPTH[min_state];;
                 }else{
                     //if we're changing direction reset to 0
                     if ( SIGN(delta) == - SIGN(curr_mc_height) ){
                         tmp_mc_height = delta;
                         //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
                     }else
-                        tmp_mc_height = curr_mc_height  + ( (SIGN(curr_mc_height)>0)?height_padding:0 ) + delta;
-
-                    valid = abs( tmp_mc_height ) < max_mc_height;
-                    if (!valid){
-                        blacklisted_states[min_state] = true;
-                        if ( noise[i] > 0.5f)
-                            blacklisted_states[1] = true;
-                        printf("Pixel %d %d reached %d: Restricted\n", x , y, tmp_mc_height);
-                    }
+                        tmp_mc_height = curr_mc_height + delta;
                 }
 
+                valid = abs( tmp_mc_height ) < max_mc_height;
+                if (!valid){
+                    blacklisted_states[min_state] = true;
+                    if ( noise[i] > 0.5f)
+                        blacklisted_states[1] = true;
+                    printf("Pixel %d %d reached %d: Restricted\n", x , y, tmp_mc_height);
+                }
 
             }else{
                 valid = true;
@@ -253,14 +250,6 @@ __kernel void Error_bleed_dither_by_cols(
         }
 
         curr_mc_height = tmp_mc_height;
-
-        if (liquid_palette_ids[min_index]){
-            printf("2 Pixel %d %d choose water %d\n", x , y, min_state);
-            height_padding = LIQUID_DEPTH[min_state];
-        }else{
-            //printf("2 Pixel %d %d choose something else\n", x , y, min_state);
-            height_padding = 0;
-        }
 
         //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", x , y, min_d[0], min_d[1], min_d[2], min_d[3]);
         //printf("Result Pixel %d %d is %d %d\n", x , y, (int)min_index ,(int)min_state);

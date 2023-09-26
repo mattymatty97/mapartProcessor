@@ -76,16 +76,14 @@ typedef enum {
     SierraL
 } dither_algorithm;
 
-void image_cleanup(void *image);
-void imagep_cleanup(void *image);
 
-void palette_cleanup(void *palette);
+void image_cleanup(image_data *image);
+
+void palette_cleanup(mapart_palette *palette);
 
 int load_image(image_data *image);
 
 int save_image(mapart_palette *palette, image_data *dither_image);
-
-int save_stats(mapart_palette *palette, image_uint_data *mapart_image);
 
 int get_palette(mapart_palette *palette_o);
 
@@ -335,21 +333,16 @@ int main(int argc, char **argv) {
 
     //convert from palette to block and height
     image_uint_data mapart_data = {
-            t_calloc((size_t)image.width * image.height * 3,
+            t_calloc((size_t)image.width * (image.height + 1) * 3,
                      sizeof (unsigned int)),
                      image.width,
                      image.height + 1,
                      3};
+    unsigned int computed_max_height = 0;
     if (ret == 0) {
         fprintf(stdout, "Convert from palette to BlockId and height\n");
         fflush(stdout);
-        ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height);
-    }
-
-    if (ret == 0) {
-        fprintf(stdout, "Save Block Statistics\n");
-        fflush(stdout);
-        ret = save_stats(&palette, &mapart_data);
+        ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height, &computed_max_height);
     }
 
     palette_cleanup(&processed_palette);
@@ -425,65 +418,6 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     }
 
     t_free(converted_image.image_data);
-    return ret;
-}
-
-int save_stats(mapart_palette *palette, image_uint_data *mapart_image) {
-    int ret = 0;
-    int height = config.maximum_height;
-    if (height < 0)
-        return 0;
-    if (height >= 0 && height <= 2)
-        height = 1;
-    unsigned int *id_count        = t_calloc(palette->palette_size          , sizeof (unsigned int));
-    unsigned int *layer_count     = t_calloc(height                         , sizeof (unsigned int));
-    unsigned int *layer_id_count  = t_calloc(palette->palette_size * height , sizeof (unsigned int));
-
-    ret = gpu_height_to_block_count(&config.gpu, mapart_image->image_data, id_count, layer_count, layer_id_count, mapart_image->width, mapart_image->height, palette->palette_size, height);
-
-    if (ret == 0){
-        char filename[100] = "images/";
-        char *appendix = "";
-
-        if (config.maximum_height == 0)
-            appendix = "_flat";
-        else if (config.maximum_height < 0)
-            appendix = "_unlimited";
-        else {
-            char smallbuff[20] = {};
-            sprintf(smallbuff, "_%d", config.maximum_height);
-            appendix = smallbuff;
-        }
-
-        sprintf(&filename[7], "%s_%s%s_stats.csv", config.project_name, config.dithering, appendix);
-        FILE *stat_file = fopen(filename, "w+");
-        if (stat_file) {
-            fprintf(stat_file, "Layer,Block Id,Count\n");
-
-            for (int i = 0; i < palette->palette_size; i++) {
-                unsigned int count = id_count[i];
-                if (count > 0)
-                    fprintf(stat_file, "-,%s,%d\n", palette->palette_id_names[i], count);
-            }
-
-            for (int i = 0; i < height; i++) {
-                if (layer_count[i] > 0)
-                    for (int j = 0; j < palette->palette_size; j++) {
-                        unsigned int count = layer_id_count[(i * palette->palette_size) + j];
-                        if (count > 0)
-                            fprintf(stat_file, "%d,%s,%d\n", i, palette->palette_id_names[j], count);
-                    }
-            }
-
-            fclose(stat_file);
-        } else {
-            fprintf(stderr, "Failed to open stat file %s: %s\n", filename, strerror(errno));
-        }
-    }
-
-    t_free(id_count);
-    t_free(layer_count);
-    t_free(layer_id_count);
     return ret;
 }
 
@@ -656,49 +590,40 @@ int get_palette(mapart_palette *palette_o) {
     return ret;
 }
 
-void image_cleanup(void *image) {
-    if (((image_data *)image)->image_data != NULL)
-        t_free(((image_data *)image)->image_data);
+void image_cleanup(image_data *image) {
+    if (image->image_data != NULL)
+        t_free(image->image_data);
 }
 
-void imagep_cleanup(void *image) {
-    if (*((image_data **)image) != NULL) {
-        if ((*((image_data **)image))->image_data != NULL)
-            t_free((*((image_data **)image))->image_data);
-        t_free(*((image_data **)image));
-        *((image_data **)image) = NULL;
-    }
-}
-
-void palette_cleanup(void *palette){
-    if ( *((mapart_palette **)palette) != NULL ){
-        if ( (*((mapart_palette **)palette))->palette != NULL ) {
-            t_free((*((mapart_palette **) palette))->palette);
-            (*((mapart_palette **) palette))->palette = NULL;
+void palette_cleanup(mapart_palette *palette){
+    if ( palette != NULL ){
+        if ( palette->palette != NULL ) {
+            t_free(palette->palette);
+            palette->palette = NULL;
         }
 
-        if ((*((mapart_palette **)palette))->is_usable != NULL ) {
-            t_free((*((mapart_palette **) palette))->is_usable);
-            (*((mapart_palette **) palette))->is_usable = NULL;
+        if (palette->is_usable != NULL ) {
+            t_free(palette->is_usable);
+            palette->is_usable = NULL;
         }
 
-        if ( (*((mapart_palette **)palette))->is_supported != NULL ) {
-            t_free((*((mapart_palette **) palette))->is_supported);
-            (*((mapart_palette **) palette))->is_supported = NULL;
+        if ( palette->is_supported != NULL ) {
+            t_free(palette->is_supported);
+            palette->is_supported = NULL;
         }
 
-        if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
-            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
-                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
-            t_free((*((mapart_palette **) palette))->palette_id_names);
-            (*((mapart_palette **) palette))->palette_id_names = NULL;
+        if ( palette->palette_id_names != NULL ) {
+            for (int i = 0; i<palette->palette_size; i++)
+                t_free(palette->palette_id_names[i]);
+            t_free(palette->palette_id_names);
+            palette->palette_id_names = NULL;
         }
 
-        if ( (*((mapart_palette **)palette))->palette_id_names != NULL ) {
-            for (int i = 0; i<(*((mapart_palette **)palette))->palette_size; i++)
-                t_free((*((mapart_palette **) palette))->palette_id_names[i]);
-            t_free((*((mapart_palette **) palette))->palette_id_names);
-            (*((mapart_palette **) palette))->palette_id_names = NULL;
+        if ( palette->palette_id_names != NULL ) {
+            for (int i = 0; i<palette->palette_size; i++)
+                t_free(palette->palette_id_names[i]);
+            t_free(palette->palette_id_names);
+            palette->palette_id_names = NULL;
         }
     }
 }
