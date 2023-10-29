@@ -631,13 +631,13 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
                 ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_progress_mem_obj, &start_height, sizeof(unsigned int), 0, global_workgroup_size * sizeof(unsigned int), 0, NULL, &event);
 
             if (ret == CL_SUCCESS)
-                ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1, &event, &event);
+                ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
 
             if (ret == CL_SUCCESS) {
                 for (size_t index = 0;
                      index < (global_workgroup_size) && ret == CL_SUCCESS; index += local_workgroup_size) {
                     ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_workgroup_size,
-                                                 &local_workgroup_size, 1, &event, &event);
+                                                 &local_workgroup_size, 0, NULL, &event);
                 }
             }
 
