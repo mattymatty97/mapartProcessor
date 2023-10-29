@@ -638,6 +638,9 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
                      index < (global_workgroup_size) && ret == CL_SUCCESS; index += local_workgroup_size) {
                     ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_workgroup_size,
                                                  &local_workgroup_size, 0, NULL, &event);
+
+                    if (ret == CL_SUCCESS)
+                        ret = clWaitForEvents(1, &event);
                 }
             }
 
@@ -989,6 +992,9 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     if (ret == CL_SUCCESS)
         for (size_t index = 0; index < (global_workgroup_size) && ret == CL_SUCCESS; index+=local_workgroup_size){
             ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_workgroup_size, &local_workgroup_size, 0, NULL, &event );
+
+            if (ret == CL_SUCCESS)
+                ret = clWaitForEvents(1, &event);
         }
 
     //read the outputs
