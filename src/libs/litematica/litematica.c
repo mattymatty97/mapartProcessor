@@ -127,6 +127,8 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 			}
 		}
 	}
+
+	return supported_block_data;
 }
 
 int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_len, mapart_stats* stats, int block_palette_len, uint8_t* new_block_palette_id_map, int* bit_packed_block_data_len) {
