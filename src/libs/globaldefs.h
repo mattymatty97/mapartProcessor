@@ -14,7 +14,6 @@
 
 typedef struct {
     char *project_name;
-    unsigned long threads;
     char *image_filename;
     char *palette_name;
     unsigned int random_seed;

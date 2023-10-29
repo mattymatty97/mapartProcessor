@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
-#include <stdbool.h>
 
 #include "libs/alloc/tracked.h"
 
@@ -13,13 +12,14 @@
 #include "libs/images/stb_image.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-
 #include "libs/images/stb_image_write.h"
 
 #define NBT_IMPLEMENTATION
 #include "libs/litematica/nbt.h"
+#undef NBT_IMPLEMENTATION
 
 #include "libs/globaldefs.h"
+#include "libs/litematica/litematica.h"
 #include "opencl/gpu.h"
 
 
@@ -47,7 +47,6 @@ unsigned long get_processor_count(){
 
 static struct option long_options[] = {
         {"project-name",   required_argument, 0, 'n'},
-        {"threads",        required_argument, 0, 't'},
         {"image",          required_argument, 0, 'i'},
         {"palette",        required_argument, 0, 'p'},
         {"random",         required_argument, 0, 'r'},
@@ -106,7 +105,6 @@ int main(int argc, char **argv) {
     int c;
     opterr = 0;
 
-    config.threads = get_processor_count();
     unsigned long thread_count;
 
     int option_index = 0;
@@ -124,12 +122,6 @@ int main(int argc, char **argv) {
 
             case 'n':
                 config.project_name = t_strdup(optarg);
-                break;
-
-            case 't':
-                thread_count = strtol(optarg, NULL, 10);
-                if (thread_count > 0)
-                    config.threads = thread_count;
                 break;
 
             case 'i':
@@ -343,6 +335,16 @@ int main(int argc, char **argv) {
         fprintf(stdout, "Convert from palette to BlockId and height\n");
         fflush(stdout);
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height, &computed_max_height);
+    }
+
+    if (ret == 0){
+        //TODO: add litematica code hook
+        mapart_stats stats = {};
+        stats.x_length = mapart_data.width;
+        stats.z_length = mapart_data.height;
+        stats.y_length = computed_max_height;
+        stats.volume = stats.x_length * stats.y_length * stats.z_length;
+
     }
 
     palette_cleanup(&processed_palette);

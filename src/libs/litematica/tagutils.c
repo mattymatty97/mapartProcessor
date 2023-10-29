@@ -1,5 +1,6 @@
 #include "tagutils.h"
 #include "nbt.h"
+#include "stdio.h"
 
 /// <summary>
 /// Sets the name of the tag to the given name

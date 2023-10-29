@@ -1,4 +1,6 @@
+
 #include "nbt.h"
+#include "../globaldefs.h"
 
 /// <summary>
 /// Stores some stats pertaining to the mapart for the litematica.c code to use
