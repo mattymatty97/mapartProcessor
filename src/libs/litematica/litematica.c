@@ -127,12 +127,14 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 			}
 		}
 	}
+
+	return supported_block_data;
 }
 
 int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_len, mapart_stats* stats, int block_palette_len, uint8_t* new_block_palette_id_map, int* bit_packed_block_data_len) {
 	int bits_per_block = log2(block_palette_len) + 1;
-	bit_packed_block_data_len = (int)ceil(stats->volume * bits_per_block / 64.0);
-	int64_t* bit_packed_block_data = t_calloc(bit_packed_block_data_len, sizeof(int64_t));
+	*bit_packed_block_data_len = (int)ceil(stats->volume * bits_per_block / 64.0);
+	int64_t* bit_packed_block_data = t_calloc(*bit_packed_block_data_len, sizeof(int64_t));
 
 	int64_t* curr_bit_section = bit_packed_block_data; // The 64-bit section that is currently being written to
 	int section_index = 0; // The index in the 64-bit section that we are at, from right to left
