@@ -487,7 +487,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     size_t bleeding_size = bleeding_count * RGBA_SIZE;
     //iterate vertically for mc compatibility
     size_t global_workgroup_size = width;
-    size_t local_workgroup_size = MIN(width, gpu->max_parallelism);
+    size_t local_workgroup_size = MIN(width, gpu->max_parallelism * 0.8);
     while (global_workgroup_size % local_workgroup_size != 0) { local_workgroup_size--; }
 
     cl_event event;

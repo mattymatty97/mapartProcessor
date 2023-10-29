@@ -1,27 +1,27 @@
 
 //reference values for sRGB
-static const float4 reference_srgb_10 = {
+static const __constant float4 reference_srgb_10 = {
     94.811f,
     100.000f,
     107.304f,
     1.0f
 };
 
-static const float4 reference_ICC = {
+static const __constant float4 reference_ICC = {
     96.720f,
     100.000f,
     81.427f,
     1.0f
 };
 
-static const float4 reference_srgb_2 = {
+static const __constant float4 reference_srgb_2 = {
     95.047f,
     100.000f,
     108.883f,
     1.0f
 };
 
-static const float4 reference = reference_srgb_10;
+#define reference reference_srgb_10
 
 __kernel void rgb_to_XYZ(__global const int *In, __global float *Out) {
 
