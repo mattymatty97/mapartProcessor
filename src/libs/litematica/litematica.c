@@ -167,7 +167,7 @@ int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_le
 			else {
 				air_bits -= section_bits_left; // Remove the bits remaining for the current section
 				curr_bit_section += air_bits >> 6; // Shift the current section forward
-				section_index = air_bits - air_bits >> 6; // Set the current section's index to the number of air bits remaining after the section shift
+				section_index = air_bits - ( air_bits >> 6 ); // Set the current section's index to the number of air bits remaining after the section shift
 				section_bits_left = 64 - section_index;
 			}
 		}

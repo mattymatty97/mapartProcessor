@@ -20,7 +20,7 @@ nbt_tag_t* create_child_compound_tag(char* name, nbt_tag_t* parent);
 /// <param name="parent">The compound tag parent to add this tag to</param>
 /// <returns>The tag created</returns>
 nbt_tag_t* create_child_list_tag(char* name, nbt_tag_type_t type, nbt_tag_t* parent);
-#define create_list_tag(filename, type) create_child_list_tag(filename, type, NULL);
+#define create_list_tag(filename, type) create_child_list_tag(filename, type, NULL)
 
 /// <summary>
 /// Creates an int tag and adds it to the parent compound tag provided
@@ -30,7 +30,7 @@ nbt_tag_t* create_child_list_tag(char* name, nbt_tag_type_t type, nbt_tag_t* par
 /// <param name="parent">The compound tag parent to add this tag to</param>
 /// <returns>The tag created</returns>
 nbt_tag_t* create_child_int_tag(char* name, int val, nbt_tag_t* parent);
-#define create_int_tag(filename, val) create_child_int_tag(filename, val, NULL);
+#define create_int_tag(filename, val) create_child_int_tag(filename, val, NULL)
 
 /// <summary>
 /// Creates a long tag and adds it to the parent compound tag provided
@@ -40,7 +40,7 @@ nbt_tag_t* create_child_int_tag(char* name, int val, nbt_tag_t* parent);
 /// <param name="parent">The compound tag parent to add this tag to</param>
 /// <returns>The tag created</returns>
 nbt_tag_t* create_child_long_tag(char* name, int64_t val, nbt_tag_t* parent);
-#define create_long_tag(filename, val) create_child_long_tag(filename, val, NULL);
+#define create_long_tag(filename, val) create_child_long_tag(filename, val, NULL)
 
 /// <summary>
 /// Creates a string tag and adds it to the parent compound tag provided
@@ -50,7 +50,7 @@ nbt_tag_t* create_child_long_tag(char* name, int64_t val, nbt_tag_t* parent);
 /// <param name="parent">The compound tag parent to add this tag to</param>
 /// <returns>The tag created</returns>
 nbt_tag_t* create_child_string_tag(char* name, char* val, nbt_tag_t* parent);
-#define create_string_tag(filename, val) create_child_string_tag(filename, val, NULL);
+#define create_string_tag(filename, val) create_child_string_tag(filename, val, NULL)
 
 /// <summary>
 /// Creates a long array tag and adds it to the parent compound tag provided
