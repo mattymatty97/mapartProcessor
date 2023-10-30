@@ -74,12 +74,9 @@ __kernel void Error_bleed_dither_by_cols(
                   __global float         *noise,
                   __global uint          *workgroup_rider, 
                   __global volatile uint *workgroup_progress,
-                  __global volatile int  *curr_mc_height,
                   __local volatile uint  *progress,
                   const uint              width,
                   const uint              height,
-                  const uint              start_height,
-                  const uint              end_height,
                   const uchar             palette_indexes,
                   __global int           *bleeding_params,
                   const uchar             bleeding_size,
@@ -93,7 +90,7 @@ __kernel void Error_bleed_dither_by_cols(
         workgroup_number        = atomic_inc(workgroup_rider);
 
         for (int i = 0; i < get_local_size(0); i++)
-            progress[i]        = start_height;
+            progress[i]        = 0;
     }
 
 
@@ -102,7 +99,10 @@ __kernel void Error_bleed_dither_by_cols(
 
     int x = (workgroup_number * get_local_size(0)) + get_local_id(0);
 
-    for (int y = start_height; y < (end_height); y++)
+
+    int curr_mc_height = 0;
+
+    for (int y = 0; y < (height); y++)
     {
         if (get_local_id(0) > 0)      
         {
@@ -162,7 +162,7 @@ __kernel void Error_bleed_dither_by_cols(
 
         int tmp_mc_height = 0;
 
-        uint abs_mc_height = abs(curr_mc_height[x]);
+        uint abs_mc_height = abs(curr_mc_height);
 
         uint reference = max_mc_height / 2;
         
@@ -170,12 +170,12 @@ __kernel void Error_bleed_dither_by_cols(
         float rand = noise[i];
 
         //have the probability heavily tipped towards high y levels
-        float f_x = abs(curr_mc_height[x])/ (float)max_mc_height;
+        float f_x = abs(curr_mc_height)/ (float)max_mc_height;
         float compare = (pow((float)reference, f_x) - 1) / (reference - 1);
 
 
         if (max_mc_height > 0 && rand < compare){
-            blacklisted_states[SIGN(curr_mc_height[x]) + 1] = true;
+            blacklisted_states[SIGN(curr_mc_height) + 1] = true;
             if (rand < compare - 0.005f){
                 blacklisted_states[1] = true;
             }
@@ -229,11 +229,11 @@ __kernel void Error_bleed_dither_by_cols(
                     tmp_mc_height = LIQUID_DEPTH[min_state];;
                 }else{
                     //if we're changing direction reset to 0
-                    if ( SIGN(delta) == - SIGN(curr_mc_height[x]) ){
+                    if ( SIGN(delta) == - SIGN(curr_mc_height) ){
                         tmp_mc_height = delta;
-                        //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height[x]);
+                        //printf("Pixel %d %d reset height was: %d\n", x , y, curr_mc_height);
                     }else
-                        tmp_mc_height = curr_mc_height[x] + delta;
+                        tmp_mc_height = curr_mc_height + delta;
                 }
 
                 valid = abs( tmp_mc_height ) < max_mc_height;
@@ -249,7 +249,7 @@ __kernel void Error_bleed_dither_by_cols(
             }
         }
 
-        curr_mc_height[x] = tmp_mc_height;
+        curr_mc_height = tmp_mc_height;
 
         //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", x , y, min_d[0], min_d[1], min_d[2], min_d[3]);
         //printf("Result Pixel %d %d is %d %d\n", x , y, (int)min_index ,(int)min_state);
@@ -291,8 +291,8 @@ __kernel void Error_bleed_dither_by_cols(
     }
 
     if (get_local_id(0) == (get_local_size(0) - 1)){
-        workgroup_progress[workgroup_number]       = end_height + min_progress;
+        workgroup_progress[workgroup_number]       = height + min_progress;
     }else{
-        progress[get_local_id(0)]                  = end_height + min_progress;
+        progress[get_local_id(0)]                  = height + min_progress;
     }
 }

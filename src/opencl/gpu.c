@@ -6,7 +6,6 @@
 #define RGB_SIZE 3
 #define RGBA_SIZE 4
 #define MULTIPLIER_SIZE 3
-#define HEIGHT_STEP 150
 
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
 
@@ -21,7 +20,7 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
     if (ret == CL_SUCCESS) {
         for (int i = 0; i < ret_num_platforms; i++) {
             ret = clGetPlatformInfo(platform_id[i], CL_PLATFORM_NAME, sizeof(char) * 300, platform_names[i], NULL);
-            ret = clGetDeviceIDs(platform_id[i], CL_DEVICE_TYPE_GPU, 10,
+            ret = clGetDeviceIDs(platform_id[i], CL_DEVICE_TYPE_ALL, 10,
                                  device_id[i], &ret_num_devices[i]);
             for (int j = 0; j < ret_num_devices[i]; j++) {
                 ret = clGetDeviceInfo(device_id[i][j], CL_DEVICE_NAME, sizeof(char) * 300, device_names[i][j],
@@ -175,7 +174,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, un
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(int), input, 0,
-                                   NULL, NULL);
+                                   NULL,  &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -191,10 +190,9 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, un
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL, &event );
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
+                                     &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -240,7 +238,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL, NULL);
+                                   NULL,  &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -256,10 +254,9 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL, &event );
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
+                                     &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -305,7 +302,7 @@ int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL, NULL);
+                                   NULL,  &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -321,10 +318,9 @@ int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, 
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL, &event );
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
+                                     &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -370,7 +366,7 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL, NULL);
+                                   NULL,  &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -386,10 +382,9 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, 
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL, &event );
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
+                                     &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -435,7 +430,7 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL, NULL);
+                                   NULL,  &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -451,10 +446,9 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL, &event );
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
+                                     &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -507,7 +501,6 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     cl_mem error_buf_mem_obj = NULL;
     cl_mem workgroup_rider_mem_obj = NULL;
     cl_mem workgroup_progress_mem_obj = NULL;
-    cl_mem curr_mc_height_mem_obj = NULL;
     cl_mem output_mem_obj = NULL;
     cl_mem bleeding_mem_obj = NULL;
     cl_kernel kernel = NULL;
@@ -540,10 +533,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == CL_SUCCESS)
         workgroup_progress_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                     global_workgroup_size * sizeof(unsigned int), NULL, &ret);
-    if (ret == CL_SUCCESS)
-        curr_mc_height_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                                    width * sizeof(int), NULL, &ret);
-    if (ret == CL_SUCCESS && bleeding_count > 0)
+    if (ret == 0 && bleeding_count > 0)
         bleeding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                           bleeding_size * sizeof(int), bleeding_params, &ret);
 
@@ -555,18 +545,14 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
     unsigned int i_pattern = 0;
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1,  &event, &event);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_progress_mem_obj, &i_pattern, sizeof(unsigned int), 0, global_workgroup_size * sizeof(unsigned int), 0, NULL, &event);
-    if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, curr_mc_height_mem_obj, &i_pattern, sizeof(unsigned int), 0, width * sizeof(int), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_progress_mem_obj, &i_pattern, sizeof(unsigned int), 0, global_workgroup_size * sizeof(unsigned int), 1,  &event, &event);
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[2].program, "Error_bleed_dither_by_cols", &ret);
     unsigned char arg_index = 0;
-    unsigned char start_height_index = 0;
-    unsigned char end_height_index = 0;
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
@@ -586,23 +572,13 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &workgroup_rider_mem_obj);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &workgroup_progress_mem_obj);
-    if (ret == CL_SUCCESS)
-        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &curr_mc_height_mem_obj);
-    if (ret == CL_SUCCESS)
+    if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_int) * global_workgroup_size, NULL);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &width);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &height);
-    if (ret == CL_SUCCESS) {
-        start_height_index = arg_index++;
-        ret = clSetKernelArg(kernel, start_height_index, sizeof(const unsigned int), (void *) &height);
-    }
-    if (ret == CL_SUCCESS) {
-        end_height_index = arg_index++;
-        ret = clSetKernelArg(kernel, end_height_index, sizeof(const unsigned int), (void *) &height);
-    }
-    if (ret == CL_SUCCESS)
+    if (ret == 0)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &palette_indexes);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &bleeding_mem_obj);
@@ -615,40 +591,9 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (unsigned int start_height = 0; start_height < height && ret == CL_SUCCESS; start_height+=HEIGHT_STEP) {
-
-            unsigned int end_height = MIN(start_height + HEIGHT_STEP, height);
-
-            if (ret == CL_SUCCESS) {
-                ret = clSetKernelArg(kernel, start_height_index, sizeof(const unsigned int), (void *) &start_height);
-            }
-            if (ret == CL_SUCCESS) {
-                ret = clSetKernelArg(kernel, end_height_index, sizeof(const unsigned int), (void *) &end_height);
-            }
-
-            if (ret == CL_SUCCESS)
-                ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_progress_mem_obj, &start_height, sizeof(unsigned int), 0, global_workgroup_size * sizeof(unsigned int), 0, NULL, &event);
-
-            if (ret == CL_SUCCESS)
-                ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &i_pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
-
-            if (ret == CL_SUCCESS) {
-                for (size_t index = 0;
-                     index < (global_workgroup_size) && ret == CL_SUCCESS; index += local_workgroup_size) {
-                    ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_workgroup_size,
-                                                 &local_workgroup_size, 0, NULL, &event);
-
-                    if (ret == CL_SUCCESS)
-                        ret = clWaitForEvents(1, &event);
-                }
-            }
-
-            if (ret == CL_SUCCESS) {
-                fprintf(stdout, "Progress %.3f%%: %d/%d\n", ((float)end_height/height)*100, end_height, height);
-                fflush(stdout);
-            }
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
+                                     1,  &event, &event);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -683,8 +628,6 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
         clReleaseMemObject(workgroup_rider_mem_obj);
     if (workgroup_progress_mem_obj != NULL)
         clReleaseMemObject(workgroup_progress_mem_obj);
-    if (workgroup_progress_mem_obj != NULL)
-        clReleaseMemObject(curr_mc_height_mem_obj);
     if (bleeding_mem_obj != NULL)
         clReleaseMemObject(bleeding_mem_obj);
 
@@ -883,10 +826,9 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_item_size) && ret == CL_SUCCESS; index+=local_item_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_item_size, &local_item_size, 0, NULL,NULL);
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL,
+                                     NULL);
 
     //read the outputs
     if (ret == CL_SUCCESS)
@@ -959,9 +901,9 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, workgroup_rider_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1,  &event, &event);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1,  &event, &event);
 
 
     //create kernel
@@ -989,13 +931,9 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &max_mem_obj);
 
     //request the gpu process
-    if (ret == CL_SUCCESS)
-        for (size_t index = 0; index < (global_workgroup_size) && ret == CL_SUCCESS; index+=local_workgroup_size){
-            ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &index, &local_workgroup_size, &local_workgroup_size, 0, NULL, &event );
-
-            if (ret == CL_SUCCESS)
-                ret = clWaitForEvents(1, &event);
-        }
+    if (ret == 0)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
+                                     1,  &event, &event);
 
     //read the outputs
     unsigned int error_status = 0;
