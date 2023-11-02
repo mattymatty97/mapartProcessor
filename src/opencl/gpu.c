@@ -18,6 +18,8 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
 
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
 
+cl_program gpu_compile_program_embed(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret);
+
 int gpu_init(main_options *config, gpu_t *gpu_holder) {
     cl_platform_id platform_id[3] = {};
     cl_device_id device_id[3][10] = {};
@@ -84,9 +86,13 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
     //compile programs
     if (ret == CL_SUCCESS) {
 
+        extern char color_cl_start[] asm("_binary_resources_opencl_color_conversions_cl_start");
+        extern char color_cl_end[] asm("_binary_resources_opencl_color_conversions_cl_end");
+        size_t file_size = color_cl_end - color_cl_start;
+
         gpu_program program = {
                 "color_conversion",
-                gpu_compile_program(config, gpu_holder, "resources/opencl/color/color_conversions.cl", &ret)
+                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/color_conversions.cl", color_cl_start, file_size, &ret)
         };
 
         gpu_holder->programs[0] = program;
@@ -95,9 +101,13 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
     if (ret == CL_SUCCESS) {
 
+        extern char mapart_cl_start[] asm("_binary_resources_opencl_mapart_cl_start");
+        extern char mapart_cl_end[] asm("_binary_resources_opencl_mapart_cl_end");
+        size_t file_size = mapart_cl_end - mapart_cl_start;
+
         gpu_program program = {
                 "mapart",
-                gpu_compile_program(config, gpu_holder, "resources/opencl/mapart/mapart.cl", &ret)
+                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/mapart.cl", mapart_cl_start, file_size,  &ret)
         };
 
         gpu_holder->programs[1] = program;
@@ -106,9 +116,13 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
     if (ret == CL_SUCCESS) {
 
+        extern char dither_cl_start[] asm("_binary_resources_opencl_dither_cl_start");
+        extern char dither_cl_end[] asm("_binary_resources_opencl_dither_cl_end");
+        size_t file_size = dither_cl_end - dither_cl_start;
+
         gpu_program program = {
                 "gen_dithering",
-                gpu_compile_program(config, gpu_holder, "resources/opencl/dithering/error_bleeding.cl", &ret)
+                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/dither.cl", dither_cl_start, file_size, &ret)
         };
 
         gpu_holder->programs[2] = program;
@@ -117,9 +131,13 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
     if (ret == CL_SUCCESS) {
 
+        extern char progress_cl_start[] asm("_binary_resources_opencl_progress_cl_start");
+        extern char progress_cl_end[] asm("_binary_resources_opencl_progress_cl_end");
+        size_t file_size = progress_cl_end - progress_cl_start;
+
         gpu_program program = {
                 "progress",
-                gpu_compile_program(config, gpu_holder, "resources/opencl/progress/progress.cl", &ret)
+                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/progress.cl", progress_cl_start, file_size, &ret)
         };
 
         gpu_holder->programs[3] = program;
@@ -174,6 +192,29 @@ cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *fi
         }
     }
     free(source_str);
+    return NULL;
+}
+
+
+cl_program gpu_compile_program_embed(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret) {
+
+    if (*ret == CL_SUCCESS) {
+        cl_program program = clCreateProgramWithSource(gpu_holder->context, 1, (const char **) &data, &size,
+                                                       ret);
+        if (*ret == CL_SUCCESS) {
+            *ret = clBuildProgram(program, 1, &gpu_holder->deviceId, NULL, NULL, NULL);
+        }
+
+        if (*ret == CL_SUCCESS) {
+            return program;
+        } else {
+            char build_log[5000] = {};
+            size_t log_size = 0;
+            clGetProgramBuildInfo(program, gpu_holder->deviceId, CL_PROGRAM_BUILD_LOG, sizeof(char) * 5000, build_log,
+                                  &log_size);
+            fprintf(stderr, "Error compiling %s:\n%s\n\n", filename, build_log);
+        }
+    }
     return NULL;
 }
 
@@ -578,7 +619,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
     //create kernel
     if (ret == CL_SUCCESS)
-        kernel = clCreateKernel(gpu->programs[2].program, "Error_bleed_dither_by_cols", &ret);
+        kernel = clCreateKernel(gpu->programs[2].program, "error_bleed", &ret);
     if (ret == CL_SUCCESS)
         progress_kernel = clCreateKernel(gpu->programs[3].program, "progress", &ret);
 

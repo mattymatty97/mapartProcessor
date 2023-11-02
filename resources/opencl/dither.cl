@@ -64,7 +64,7 @@ float deltaCMC(float4 lab1, float4 lab2){
 
 //kernel
 
-__kernel void Error_bleed_dither_by_cols(
+__kernel void error_bleed(
                     __global float         *src,      
                     __global uchar         *dst,      
                     __global float         *err_buf,     
