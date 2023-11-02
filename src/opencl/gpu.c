@@ -25,6 +25,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
     char device_names[3][10][301] = {};
     cl_uint ret_num_devices[3] = {};
     cl_uint ret_num_platforms = 0;
+
+    gpu_holder->verbose = config->verbose;
+
     cl_int ret = clGetPlatformIDs(3, platform_id, &ret_num_platforms);
     if (ret == CL_SUCCESS) {
         for (int i = 0; i < ret_num_platforms; i++) {
@@ -109,6 +112,17 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
         };
 
         gpu_holder->programs[2] = program;
+
+    }
+
+    if (ret == CL_SUCCESS) {
+
+        gpu_program program = {
+                "progress",
+                gpu_compile_program(config, gpu_holder, "resources/opencl/progress/progress.cl", &ret)
+        };
+
+        gpu_holder->programs[3] = program;
 
     }
 
@@ -519,6 +533,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     cl_mem coord_mem_obj = NULL;
     cl_mem bleeding_mem_obj = NULL;
     cl_kernel kernel = NULL;
+    cl_kernel progress_kernel = NULL;
 
     //create memory objects
 
@@ -557,13 +572,16 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     int i_pattern = 0;
 
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (float), 0, buffer_size * sizeof(float), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (float), 0, buffer_size * sizeof(float), 0, NULL, NULL);
     if (ret == CL_SUCCESS)
-            ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &i_pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, &event);
+            ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &i_pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[2].program, "Error_bleed_dither_by_cols", &ret);
+    if (ret == CL_SUCCESS)
+        progress_kernel = clCreateKernel(gpu->programs[3].program, "progress", &ret);
+
     unsigned char arg_index = 0;
     //set kernel arguments
     if (ret == CL_SUCCESS)
@@ -599,8 +617,16 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
 
+    //set progress kernel params
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clSetKernelArg(progress_kernel, 0, sizeof(const unsigned int), (void *) &width);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(progress_kernel, 1, sizeof(const unsigned int), (void *) &height);
+
+    //let all the fill operations complete first
+    if (ret == CL_SUCCESS){
+        ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, NULL);
+    }
 
     //request the gpu process
     if (ret == CL_SUCCESS){
@@ -611,13 +637,20 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
                 local_workgroup_size = MIN(diaLen - offset, gpu->max_parallelism);
                 size_t curr_offset = totalOffset + offset;
                 ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &curr_offset, &local_workgroup_size, &local_workgroup_size,
-                                             0,  NULL, &event);
-
-                if (ret == CL_SUCCESS)
-                    ret = clWaitForEvents(1, &event);
+                                             0,  NULL,NULL);
 
             }
+            //let all computations for the previous diagonal to complete then continue ( this is all non-blocking for the cpu)
+            if (ret == CL_SUCCESS){
+                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event);
+            }
             totalOffset += diaLen;
+            if (ret == CL_SUCCESS && gpu->verbose){
+                size_t unit = 1;
+                size_t offset = totalOffset -1;
+                ret = clEnqueueNDRangeKernel(gpu->commandQueue, progress_kernel, 1, &offset, &unit, &unit,
+                                             0,  NULL, NULL);
+            }
         }
     }
 
@@ -635,6 +668,9 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
+
+    if (progress_kernel != NULL)
+        clReleaseKernel(progress_kernel);
 
     if (input_mem_obj != NULL)
         clReleaseMemObject(input_mem_obj);
@@ -887,10 +923,6 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
                           unsigned int height, int max_minecraft_y, unsigned int* computed_max_minecraft_y) {
     size_t buffer_size = (size_t)width * height * 2;
     size_t output_size = (size_t)width * (height + 1) * 3;
-    //iterate vertically for mc compatibility
-    size_t global_workgroup_size = width * height;
-    size_t local_workgroup_size = MIN(height, gpu->max_parallelism);
-    while (global_workgroup_size % local_workgroup_size != 0) { local_workgroup_size--; }
 
     cl_event event;
 
@@ -904,6 +936,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     cl_mem padding_mem_obj = NULL;
     cl_mem max_mem_obj = NULL;
     cl_kernel kernel = NULL;
+    cl_kernel progress_kernel = NULL;
 
     //create memory objects
 
@@ -936,23 +969,30 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     unsigned int pattern = 0;
 
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, NULL);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1,  &event, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &pattern, sizeof(int), 0, sizeof(unsigned int), 1,  &event, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &pattern, sizeof(int), 0, sizeof(unsigned int), 0,  NULL, NULL);
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, index_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 1,  &event, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, index_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
 
     int padding_pattern = -1;
 
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, padding_mem_obj, &padding_pattern, sizeof(int), 0, sizeof(unsigned int), 1,  &event, &event);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, padding_mem_obj, &padding_pattern, sizeof(int), 0, sizeof(unsigned int), 0,  NULL, NULL);
 
+    //let all the fill operations complete first
+    if (ret == CL_SUCCESS){
+        ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, NULL);
+    }
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[1].program, "palette_to_height", &ret);
+    if (ret == CL_SUCCESS)
+        progress_kernel = clCreateKernel(gpu->programs[3].program, "progress", &ret);
+
     unsigned char arg_index = 0;
     //set kernel arguments
     if (ret == CL_SUCCESS)
@@ -978,10 +1018,38 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &max_mem_obj);
 
+
+    //set progress kernel params
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(progress_kernel, 0, sizeof(const unsigned int), (void *) &width);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(progress_kernel, 1, sizeof(const unsigned int), (void *) &height);
+
     //request the gpu process
-    if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_workgroup_size, &local_workgroup_size,
-                                     1,  &event, &event);
+    if (ret == CL_SUCCESS){
+        size_t unit = 1;
+        unsigned int totalOffset = 0;
+        for (unsigned int row = 0; row < height; row++){
+            for (size_t local_workgroup_size = 0, offset = 0; offset < width  && ret == CL_SUCCESS; offset += local_workgroup_size){
+                local_workgroup_size = MIN(width - offset, gpu->max_parallelism);
+                size_t curr_offset = totalOffset + offset;
+                ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, &curr_offset, &local_workgroup_size, &local_workgroup_size,
+                                             0,  NULL,NULL);
+
+            }
+            //let all computations for the previous row to complete then continue ( this is all non-blocking for the cpu)
+            if (ret == CL_SUCCESS){
+                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event);
+            }
+
+            totalOffset += width;
+            if (ret == CL_SUCCESS && gpu->verbose){
+                size_t offset = totalOffset -1;
+                ret = clEnqueueNDRangeKernel(gpu->commandQueue, progress_kernel, 1, &offset, &unit, &unit,
+                                             0,  NULL, NULL);
+            }
+        }
+    }
 
     //read the outputs
     unsigned int error_status = 0;
@@ -989,7 +1057,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
                                   &error_status, 1, &event, &event);
 
-    if (error_status > 0) {
+    if (ret == CL_SUCCESS && error_status > 0) {
         fprintf(stderr, "Kernel returned error!\n");
         ret = error_status;
     }
@@ -1011,6 +1079,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
+    if (progress_kernel != NULL)
+        clReleaseKernel(progress_kernel);
 
     if (input_mem_obj != NULL)
         clReleaseMemObject(input_mem_obj);

@@ -52,7 +52,8 @@ static struct option long_options[] = {
         {"random",         required_argument, 0, 'r'},
         {"random-seed",    required_argument, 0, 'r'},
         {"maximum-height", required_argument, 0, 'h'},
-        {"dithering",      required_argument, 0, 'd'}
+        {"dithering",      required_argument, 0, 'd'},
+        {"verbose",      no_argument, 0, 'v'}
 };
 
 main_options config = {};
@@ -108,7 +109,7 @@ int main(int argc, char **argv) {
     unsigned long thread_count;
 
     int option_index = 0;
-    while ((c = getopt_long(argc, argv, ":i:p:d:r:h:n:t:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, ":i:p:d:r:h:n:t:v", long_options, &option_index)) != -1) {
         switch (c) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
@@ -119,7 +120,9 @@ int main(int argc, char **argv) {
                     printf(" with arg %s", optarg);
                 printf("\n");
                 break;
-
+            case 'v':
+                config.verbose = 1;
+                break;
             case 'n':
                 config.project_name = t_strdup(optarg);
                 break;

@@ -22,6 +22,7 @@ typedef struct {
     cl_context context;
     cl_command_queue commandQueue;
     gpu_program programs[12];
+    char verbose;
 } gpu_t;
 
 #endif

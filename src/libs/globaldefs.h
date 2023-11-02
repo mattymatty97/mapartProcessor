@@ -19,6 +19,7 @@ typedef struct {
     unsigned int random_seed;
     int maximum_height;
     char *dithering;
+    char verbose;
     gpu_t gpu;
 } main_options;
 

@@ -73,7 +73,7 @@ __kernel void Error_bleed_dither_by_cols(
                     __global uchar         *liquid_palette_ids,
                     __global float         *noise,
                     __global volatile int  *mc_height,
-                    __global uint         *coord_list,
+                    __global uint          *coord_list,
                     const uint              width,
                     const uint              height,
                     const uchar             palette_indexes,
