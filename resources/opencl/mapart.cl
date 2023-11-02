@@ -1,3 +1,12 @@
+
+
+#define SIGN(x) ((x > 0) - (x < 0))
+
+//constants
+#define LIQUID_DEPTH (int3)(10,5,1)
+
+//kernels
+
 __kernel void palette_to_rgb(
                 __global const unsigned char  *In, 
                 __global const int *palette, 
@@ -16,13 +25,6 @@ __kernel void palette_to_rgb(
     Out[(i * 4) + 3] = palette[(index * palette_variations * 4) + (state * 4) + 3];
 }
 
-
-#define SIGN(x) ((x > 0) - (x < 0))
-
-//constants
-#define LIQUID_DEPTH (int3)(10,5,1)
-
-//kernel
 
 __kernel void palette_to_height(
                 __global uchar         *src,
@@ -158,4 +160,32 @@ __kernel void palette_to_height(
         vstore3(ret_pixel, o ,dst);
         //printf("Pixel %d (%d ,%d) 9\n", (uint)index, (uint)x, (unsigned int)y);
     }
+}
+
+
+
+__kernel void height_to_stats(
+                __global uint                  *src,
+                __global volatile uint         *layer_count,
+                __global volatile uint         *layer_id_count,
+                __global volatile uint         *id_count
+                )
+{
+
+    size_t index     = get_global_id(0);
+
+    uint3 og_pixel   = vload3(index, src);
+
+    uint block_id    = og_pixel[0];
+
+    uint min_layer   = og_pixel[1];
+
+    uint max_layer   = og_pixel[2];
+
+    for (uchar layer = min_layer; layer <= max_layer; layer++){
+        atomic_inc(&layer_count[layer]);
+        atomic_inc(&layer_id_count[(layer * UCHAR_MAX) + block_id]);
+        atomic_inc(&id_count[block_id]);
+    }
+
 }

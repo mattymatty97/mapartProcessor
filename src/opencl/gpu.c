@@ -18,7 +18,7 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
 
 cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *filename, cl_int *ret);
 
-cl_program gpu_compile_program_embed(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret);
+cl_program gpu_compile_embedded_program(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret);
 
 int gpu_init(main_options *config, gpu_t *gpu_holder) {
     cl_platform_id platform_id[3] = {};
@@ -92,7 +92,8 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_program program = {
                 "color_conversion",
-                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/color_conversions.cl", color_cl_start, file_size, &ret)
+                gpu_compile_embedded_program(config, gpu_holder, "resources/opencl/color_conversions.cl",
+                                             color_cl_start, file_size, &ret)
         };
 
         gpu_holder->programs[0] = program;
@@ -107,7 +108,8 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_program program = {
                 "mapart",
-                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/mapart.cl", mapart_cl_start, file_size,  &ret)
+                gpu_compile_embedded_program(config, gpu_holder, "resources/opencl/mapart.cl", mapart_cl_start,
+                                             file_size, &ret)
         };
 
         gpu_holder->programs[1] = program;
@@ -122,7 +124,8 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_program program = {
                 "gen_dithering",
-                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/dither.cl", dither_cl_start, file_size, &ret)
+                gpu_compile_embedded_program(config, gpu_holder, "resources/opencl/dither.cl", dither_cl_start,
+                                             file_size, &ret)
         };
 
         gpu_holder->programs[2] = program;
@@ -137,7 +140,8 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_program program = {
                 "progress",
-                gpu_compile_program_embed(config, gpu_holder, "resources/opencl/progress.cl", progress_cl_start, file_size, &ret)
+                gpu_compile_embedded_program(config, gpu_holder, "resources/opencl/progress.cl", progress_cl_start,
+                                             file_size, &ret)
         };
 
         gpu_holder->programs[3] = program;
@@ -196,7 +200,7 @@ cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *fi
 }
 
 
-cl_program gpu_compile_program_embed(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret) {
+cl_program gpu_compile_embedded_program(main_options *config, gpu_t *gpu_holder, char *filename, char * data, size_t size, cl_int *ret) {
 
     if (*ret == CL_SUCCESS) {
         cl_program program = clCreateProgramWithSource(gpu_holder->context, 1, (const char **) &data, &size,
@@ -1143,6 +1147,106 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     return ret;
 }
 
+
+int gpu_height_to_stats(gpu_t *gpu, unsigned int *input, unsigned int *layer_count, unsigned int *layer_id_count, unsigned int *id_count, unsigned int width, unsigned int height, unsigned int layers) {
+    size_t buffer_size = (size_t)width * height * 3;
+    size_t layer_size = layers;
+    size_t layer_id_size = layers * UCHAR_MAX;
+    size_t id_size = UCHAR_MAX;
+    cl_int ret = 0;
+    cl_mem input_mem_obj = NULL;
+    cl_mem layer_mem_obj = NULL;
+    cl_mem layer_id_mem_obj = NULL;
+    cl_mem id_mem_obj = NULL;
+    cl_kernel kernel = NULL;
+
+    cl_event event[4];
+
+    //create memory objects
+
+    input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                                   buffer_size * sizeof(unsigned int), input, &ret);
+
+    if (ret == CL_SUCCESS)
+        layer_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                        layer_size * sizeof(unsigned int), NULL, &ret);
+
+    if (ret == CL_SUCCESS)
+        layer_id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                        layer_id_size * sizeof(unsigned int), NULL, &ret);
+
+    if (ret == CL_SUCCESS)
+        id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
+                                        id_size * sizeof(unsigned int), NULL, &ret);
+
+    unsigned int zero = 0;
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_mem_obj, &zero, sizeof (unsigned int), 0, layer_size * sizeof(unsigned int), 0, NULL, NULL);
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, layer_id_mem_obj, &zero, sizeof (unsigned int), 0, layer_id_size * sizeof(unsigned int), 0, NULL, NULL);
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, id_mem_obj, &zero, sizeof (unsigned int), 0, id_size * sizeof(unsigned int), 0, NULL, NULL);
+
+    //create kernel
+    if (ret == CL_SUCCESS)
+        kernel = clCreateKernel(gpu->programs[1].program, "height_to_stats", &ret);
+
+    //set kernel arguments
+    unsigned char arg_index = 0;
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_mem_obj);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_id_mem_obj);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &id_mem_obj);
+
+    size_t global_item_size = width * height;
+    size_t local_item_size = MIN(height, gpu->max_parallelism);
+    while (global_item_size % local_item_size != 0) { local_item_size--; }
+
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueBarrierWithWaitList(gpu->commandQueue,0, NULL, NULL);
+
+    //request the gpu process
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0,  NULL,
+                                     &event[0]);
+
+    //read the outputs
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_mem_obj, CL_TRUE, 0, layer_size * sizeof(unsigned int), layer_count, 0,
+                                  NULL, &event[1]);
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, layer_id_mem_obj, CL_TRUE, 0, layer_id_size * sizeof(unsigned int), layer_id_count, 0,
+                                  NULL, &event[2]);
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueReadBuffer(gpu->commandQueue, id_mem_obj, CL_TRUE, 0, id_size * sizeof(unsigned int), id_count, 0,
+                                  NULL, &event[3]);
+
+    //wait for outputs
+    if (ret == CL_SUCCESS)
+        ret = clWaitForEvents(4, event);
+
+    //flush remaining tasks
+    if (ret == CL_SUCCESS)
+        ret = clFlush(gpu->commandQueue);
+
+    if (kernel != NULL)
+        clReleaseKernel(kernel);
+
+    if (input_mem_obj != NULL)
+        clReleaseMemObject(input_mem_obj);
+    if (layer_mem_obj != NULL)
+        clReleaseMemObject(layer_mem_obj);
+    if (layer_id_mem_obj != NULL)
+        clReleaseMemObject(layer_id_mem_obj);
+    if (id_mem_obj != NULL)
+        clReleaseMemObject(id_mem_obj);
+
+    return ret;
+}
 // diagonals
 
 index_holder generate_indexes(unsigned int width, unsigned int height, unsigned int steepness){

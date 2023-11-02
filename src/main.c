@@ -83,6 +83,8 @@ void palette_cleanup(mapart_palette *palette);
 
 int load_image(image_data *image);
 
+char * gen_filename(char *prefix, char *extension);
+
 int save_image(mapart_palette *palette, image_data *dither_image);
 
 int get_palette(mapart_palette *palette_o);
@@ -340,14 +342,36 @@ int main(int argc, char **argv) {
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height, &computed_max_height);
     }
 
+    unsigned int* count_by_layer = NULL;
+    unsigned int* count_by_layer_id = NULL;
+    unsigned int* count_by_id = NULL;
+
     if (ret == 0){
-        //TODO: add litematica code hook
+        count_by_id = t_calloc(UCHAR_MAX, sizeof (unsigned int));
+        count_by_layer = t_calloc(computed_max_height, sizeof (unsigned int));
+        count_by_layer_id = t_calloc(computed_max_height * UCHAR_MAX, sizeof (unsigned int));
+        fprintf(stdout, "Generating Stats from converted image\n");
+        fflush(stdout);
+        ret = gpu_height_to_stats(&config.gpu, mapart_data.image_data, count_by_layer, count_by_layer_id, count_by_id, mapart_data.width, mapart_data.height, computed_max_height);
+    }
+
+
+    if (ret == 0){
         mapart_stats stats = {};
         stats.x_length = mapart_data.width;
         stats.z_length = mapart_data.height;
         stats.y_length = computed_max_height;
         stats.volume = stats.x_length * stats.y_length * stats.z_length;
+        stats.layer_id_count = count_by_layer_id;
+        version_numbers versions = {};
+        versions.litematica = 1;
+        versions.mc_data = 12001;
+        char * folder = "litematica/";
+        mkdir(folder);
+        char * filename = gen_filename(folder ,".litematica");
 
+        //TODO: debug litematica code
+        litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
     }
 
     palette_cleanup(&processed_palette);
@@ -357,6 +381,10 @@ int main(int argc, char **argv) {
     image_cleanup(&mapart_data);
     image_cleanup(&image);
     image_cleanup(&dithered_image);
+
+    t_free(count_by_id);
+    t_free(count_by_layer_id);
+    t_free(count_by_layer);
 
     gpu_clear(&config.gpu);
     return ret;
@@ -380,6 +408,24 @@ int load_image(image_data *image) {
     }
 }
 
+char * gen_filename(char *prefix, char *extension){
+    char filename[1000] = {};
+    char *appendix = "";
+
+    if (config.maximum_height == 0)
+        appendix = "_flat";
+    else if (config.maximum_height < 0)
+        appendix = "_unlimited";
+    else {
+        char smallbuff[20] = {};
+        sprintf(smallbuff, "_%d", config.maximum_height);
+        appendix = smallbuff;
+    }
+
+    sprintf(filename, "%s%s_%s%s%s", prefix, config.project_name, config.dithering, appendix, extension);
+    return t_strdup(filename);
+}
+
 int save_image(mapart_palette *palette, image_data *dither_image) {
     int ret = 0;
     image_data converted_image = {NULL, dither_image->width, dither_image->height, 4};
@@ -391,23 +437,10 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
 
     ret = gpu_palette_to_rgb(&config.gpu, dither_image->image_data, palette->palette,
                              converted_image.image_data, dither_image->width, dither_image->height, palette->palette_size, MULTIPLIER_SIZE);
-
-    char filename[1000] = "images/";
+    char * folder = "images/";
+    mkdir(folder);
+    char * filename = gen_filename(folder, ".png");
     if (ret == 0) {
-        char *appendix = "";
-
-        if (config.maximum_height == 0)
-            appendix = "_flat";
-        else if (config.maximum_height < 0)
-            appendix = "_unlimited";
-        else {
-            char smallbuff[20] = {};
-            sprintf(smallbuff, "_%d", config.maximum_height);
-            appendix = smallbuff;
-        }
-
-        sprintf(&filename[7], "%s_%s%s.png", config.project_name, config.dithering, appendix);
-
         fprintf(stdout, "Save image\n");
         fflush(stdout);
         ret = stbi_write_png(filename, converted_image.width, converted_image.height, converted_image.channels,
@@ -421,6 +454,7 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
             ret = 0;
         }
     }
+    t_free(filename);
 
     t_free(converted_image.image_data);
     return ret;

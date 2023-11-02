@@ -97,6 +97,8 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
 int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_liquid, unsigned int *output,unsigned char palette_size, unsigned int width,
                           unsigned int height, int max_minecraft_y, unsigned int* computed_max_minecraft_y);
 
+int gpu_height_to_stats(gpu_t *gpu, unsigned int *input, unsigned int *layer_count, unsigned int *layer_id_count, unsigned int *id_count, unsigned int width, unsigned int height, unsigned int layers);
+
 #else
 #undef GPU_CODE_NO_RECURSION
 #endif
