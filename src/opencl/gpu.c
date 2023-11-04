@@ -79,8 +79,7 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
     //if all is ok
     if (ret == CL_SUCCESS) {
-        gpu_holder->commandQueue = clCreateCommandQueueWithProperties(context, device_id[platform_index][device_index],
-                                                                      NULL, &ret);
+        gpu_holder->commandQueue = clCreateCommandQueueWithProperties(context, device_id[platform_index][device_index],NULL, &ret);
     }
 
     //compile programs

@@ -1,0 +1,817 @@
+{
+  "name": "1.17",
+  "multipliers": [
+    180,
+    220,
+    255
+  ],
+  "support_block_id": "minecraft:moss_block",
+  "colors": [
+    {
+      "id": 0,
+      "name": "AIR",
+      "block_id": "minecraft:glass",
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 1,
+      "name": "GRASS",
+      "block_id": "minecraft:slime_block",
+      "color": [
+        127,
+        178,
+        56
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 2,
+      "name": "SAND",
+      "block_id": "minecraft:birch_planks",
+      "color": [
+        247,
+        233,
+        163
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 3,
+      "name": "WOOL",
+      "block_id": "minecraft:mushroom_stem[down=true, east=true, north=true, south=true, up=true, west=true]",
+      "color": [
+        199,
+        199,
+        199
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 4,
+      "name": "FIRE",
+      "block_id": "minecraft:redstone_block",
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 5,
+      "name": "ICE",
+      "block_id": "minecraft:packed_ice",
+      "color": [
+        160,
+        160,
+        255
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 6,
+      "name": "METAL",
+      "block_id": "minecraft:iron_block",
+      "color": [
+        167,
+        167,
+        167
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 7,
+      "name": "PLANT",
+      "block_id": "minecraft:oak_leaves",
+      "color": [
+        0,
+        124,
+        0
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 8,
+      "name": "SNOW",
+      "block_id": "minecraft:white_wool",
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 9,
+      "name": "CLAY",
+      "block_id": "minecraft:clay",
+      "color": [
+        164,
+        168,
+        184
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 10,
+      "name": "DIRT",
+      "block_id": "minecraft:dirt",
+      "color": [
+        151,
+        109,
+        77
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 11,
+      "name": "STONE",
+      "block_id": "minecraft:cobblestone",
+      "color": [
+        112,
+        112,
+        112
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 12,
+      "name": "WATER",
+      "block_id": "minecraft:oak_leaves[waterlogged=true]",
+      "color": [
+        64,
+        64,
+        255
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  true
+    },
+    {
+      "id": 13,
+      "name": "WOOD",
+      "block_id": "minecraft:oak_planks",
+      "color": [
+        143,
+        119,
+        72
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 14,
+      "name": "QUARTZ",
+      "block_id": "minecraft:sea_lantern",
+      "color": [
+        255,
+        252,
+        245
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 15,
+      "name": "COLOR_ORANGE",
+      "block_id": "minecraft:orange_wool",
+      "color": [
+        216,
+        127,
+        51
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 16,
+      "name": "COLOR_MAGENTA",
+      "block_id": "minecraft:magenta_wool",
+      "color": [
+        178,
+        76,
+        216
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 17,
+      "name": "COLOR_LIGHT_BLUE",
+      "block_id": "minecraft:light_blue_wool",
+      "color": [
+        102,
+        153,
+        216
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 18,
+      "name": "COLOR_YELLOW",
+      "block_id": "minecraft:yellow_wool",
+      "color": [
+        229,
+        229,
+        51
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 19,
+      "name": "COLOR_LIGHT_GREEN",
+      "block_id": "minecraft:lime_wool",
+      "color": [
+        127,
+        204,
+        25
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 20,
+      "name": "COLOR_PINK",
+      "block_id": "minecraft:pink_wool",
+      "color": [
+        242,
+        127,
+        165
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 21,
+      "name": "COLOR_GRAY",
+      "block_id": "minecraft:gray_wool",
+      "color": [
+        76,
+        76,
+        76
+      ],
+      "usable": true,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 22,
+      "name": "COLOR_LIGHT_GRAY",
+      "block_id": "minecraft:light_gray_wool",
+      "color": [
+        153,
+        153,
+        153
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 23,
+      "name": "COLOR_CYAN",
+      "block_id": "minecraft:cyan_wool",
+      "color": [
+        76,
+        127,
+        153
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 24,
+      "name": "COLOR_PURPLE",
+      "block_id": "minecraft:purple_wool",
+      "color": [
+        127,
+        63,
+        178
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 25,
+      "name": "COLOR_BLUE",
+      "block_id": "minecraft:blue_wool",
+      "color": [
+        51,
+        76,
+        178
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 26,
+      "name": "COLOR_BROWN",
+      "block_id": "minecraft:brown_wool",
+      "color": [
+        102,
+        76,
+        51
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 27,
+      "name": "COLOR_GREEN",
+      "block_id": "minecraft:green_wool",
+      "color": [
+        102,
+        127,
+        51
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 28,
+      "name": "COLOR_RED",
+      "block_id": "minecraft:red_wool",
+      "color": [
+        153,
+        51,
+        51
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 29,
+      "name": "COLOR_BLACK",
+      "block_id": "minecraft:black_wool",
+      "color": [
+        25,
+        25,
+        25
+      ],
+      "usable": true,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 30,
+      "name": "GOLD",
+      "block_id": "minecraft:gold_block",
+      "color": [
+        250,
+        238,
+        77
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 31,
+      "name": "DIAMOND",
+      "block_id": "minecraft:prismarine",
+      "color": [
+        92,
+        219,
+        213
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 32,
+      "name": "LAPIS",
+      "block_id": "minecraft:lapis_block",
+      "color": [
+        74,
+        128,
+        255
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 33,
+      "name": "EMERALD",
+      "block_id": "minecraft:emerald_block",
+      "color": [
+        0,
+        217,
+        58
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 34,
+      "name": "PODZOL",
+      "block_id": "minecraft:spruce_planks",
+      "color": [
+        129,
+        86,
+        49
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 35,
+      "name": "NETHER",
+      "block_id": "minecraft:nether_bricks",
+      "color": [
+        112,
+        2,
+        0
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 36,
+      "name": "TERRACOTTA_WHITE",
+      "block_id": "minecraft:white_terracotta",
+      "color": [
+        209,
+        177,
+        161
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 37,
+      "name": "TERRACOTTA_ORANGE",
+      "block_id": "minecraft:orange_terracotta",
+      "color": [
+        159,
+        82,
+        36
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 38,
+      "name": "TERRACOTTA_MAGENTA",
+      "block_id": "minecraft:magenta_terracotta",
+      "color": [
+        149,
+        87,
+        108
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 39,
+      "name": "TERRACOTTA_LIGHT_BLUE",
+      "block_id": "minecraft:light_blue_terracotta",
+      "color": [
+        112,
+        108,
+        138
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 40,
+      "name": "TERRACOTTA_YELLOW",
+      "block_id": "minecraft:yellow_terracotta",
+      "color": [
+        186,
+        133,
+        36
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 41,
+      "name": "TERRACOTTA_LIGHT_GREEN",
+      "block_id": "minecraft:lime_terracotta",
+      "color": [
+        103,
+        117,
+        53
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 42,
+      "name": "TERRACOTTA_PINK",
+      "block_id": "minecraft:pink_terracotta",
+      "color": [
+        160,
+        77,
+        78
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 43,
+      "name": "TERRACOTTA_GRAY",
+      "block_id": "minecraft:gray_terracotta",
+      "color": [
+        57,
+        41,
+        35
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 44,
+      "name": "TERRACOTTA_LIGHT_GRAY",
+      "block_id": "minecraft:light_gray_terracotta",
+      "color": [
+        135,
+        107,
+        98
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 45,
+      "name": "TERRACOTTA_CYAN",
+      "block_id": "minecraft:cyan_terracotta",
+      "color": [
+        87,
+        92,
+        92
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 46,
+      "name": "TERRACOTTA_PURPLE",
+      "block_id": "minecraft:purple_terracotta",
+      "color": [
+        122,
+        73,
+        88
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 47,
+      "name": "TERRACOTTA_BLUE",
+      "block_id": "minecraft:blue_terracotta",
+      "color": [
+        76,
+        62,
+        92
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 48,
+      "name": "TERRACOTTA_BROWN",
+      "block_id": "minecraft:brown_terracotta",
+      "color": [
+        76,
+        50,
+        35
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 49,
+      "name": "TERRACOTTA_GREEN",
+      "block_id": "minecraft:green_terracotta",
+      "color": [
+        76,
+        82,
+        42
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 50,
+      "name": "TERRACOTTA_RED",
+      "block_id": "minecraft:red_terracotta",
+      "color": [
+        142,
+        60,
+        46
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 51,
+      "name": "TERRACOTTA_BLACK",
+      "block_id": "minecraft:black_terracotta",
+      "color": [
+        37,
+        22,
+        16
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 52,
+      "name": "CRIMSON_NYLIUM",
+      "block_id": "minecraft:crimson_nylium",
+      "color": [
+        189,
+        48,
+        49
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 53,
+      "name": "CRIMSON_STEM",
+      "block_id": "minecraft:crimson_planks",
+      "color": [
+        148,
+        63,
+        97
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 54,
+      "name": "CRIMSON_HYPHAE",
+      "block_id": "minecraft:crimson_hyphae",
+      "color": [
+        92,
+        25,
+        29
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 55,
+      "name": "WARPED_NYLIUM",
+      "block_id": "minecraft:oxidized_copper",
+      "color": [
+        22,
+        126,
+        134
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 56,
+      "name": "WARPED_STEM",
+      "block_id": "minecraft:warped_planks",
+      "color": [
+        58,
+        142,
+        140
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 57,
+      "name": "WARPED_HYPHAE",
+      "block_id": "minecraft:warped_hyphae",
+      "color": [
+        86,
+        44,
+        62
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 58,
+      "name": "WARPED_WART_BLOCK",
+      "block_id": "minecraft:warped_wart_block",
+      "color": [
+        20,
+        180,
+        133
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 59,
+      "name": "DEEPSLATE",
+      "block_id": "minecraft:deepslate",
+      "color": [
+        100,
+        100,
+        100
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 60,
+      "name": "RAW_IRON",
+      "block_id": "minecraft:raw_iron_block",
+      "color": [
+        216,
+        175,
+        147
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    },
+    {
+      "id": 61,
+      "name": "GLOW_LICHEN",
+      "block_id": "minecraft:verdant_froglight",
+      "color": [
+        127,
+        167,
+        150
+      ],
+      "usable": false,
+      "needs_support": false,
+      "is_liquid":  false
+    }
+  ]
+}

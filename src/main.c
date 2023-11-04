@@ -342,6 +342,11 @@ int main(int argc, char **argv) {
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height, &computed_max_height);
     }
 
+    if (ret == 0){
+        fprintf(stdout, "Computed max height is: %d\n", computed_max_height);
+        fflush(stdout);
+    }
+
     unsigned int* count_by_layer = NULL;
     unsigned int* count_by_layer_id = NULL;
     unsigned int* count_by_id = NULL;
