@@ -130,13 +130,13 @@ __kernel void error_bleed(
         blacklisted_liquid_states[0] = true;
         blacklisted_liquid_states[1] = true;
     }else {
-        for(char i = 0; i < 3; i++){
-            if (LIQUID_DEPTH[i] > max_mc_height)
-                blacklisted_liquid_states[i] = true;
+        for(char state = 0; state < 3; state++){
+            if (LIQUID_DEPTH[state] > max_mc_height)
+                blacklisted_liquid_states[state] = true;
         }
     }
 
-    int tmp_mc_height = 0;
+    int tmp_mc_height = curr_mc_height;
 
     uint abs_mc_height = abs(curr_mc_height);
 
@@ -202,7 +202,7 @@ __kernel void error_bleed(
             if (liquid_palette_ids[min_index]){
                 printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
                 //if this is a liquid
-                tmp_mc_height = LIQUID_DEPTH[min_state];;
+                tmp_mc_height = LIQUID_DEPTH[min_state];
             }else{
                 //if we're changing direction reset to 0
                 if ( SIGN(delta) == - SIGN(curr_mc_height) ){
