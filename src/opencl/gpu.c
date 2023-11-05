@@ -228,7 +228,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, un
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
-    cl_event event;
+    cl_event event[5];
 
     //create memory objects
 
@@ -241,7 +241,7 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, un
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(int), input, 0,
-                                   NULL,  &event);
+                                   NULL,  &event[0]);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -258,17 +258,17 @@ int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, un
 
     //request the gpu process
     if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
-                                     &event);
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
+                                     &event[1]);
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
-                                  &event, &event);
+                                  &event[1], &event[2]);
 
     //wait for outputs
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[2]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -292,7 +292,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
-    cl_event event;
+    cl_event event[5];
 
     //create memory objects
 
@@ -305,7 +305,7 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL,  &event);
+                                   NULL,  &event[0]);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -323,17 +323,17 @@ int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
 
     //request the gpu process
     if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
-                                     &event);
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
+                                     &event[1]);
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
-                                  &event, &event);
+                                  &event[1], &event[2]);
 
     //wait for outputs
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[2]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -357,7 +357,7 @@ int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, 
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
-    cl_event event;
+    cl_event event[5];
 
     //create memory objects
 
@@ -370,7 +370,7 @@ int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL,  &event);
+                                   NULL,  &event[0]);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -388,17 +388,17 @@ int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, 
 
     //request the gpu process
     if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
-                                     &event);
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
+                                     &event[1]);
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
-                                  &event, &event);
+                                  &event[1], &event[2]);
 
     //wait for outputs
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[2]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -422,7 +422,7 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, 
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
-    cl_event event;
+    cl_event event[5];
 
     //create memory objects
 
@@ -435,7 +435,7 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL,  &event);
+                                   NULL,  &event[0]);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -453,17 +453,17 @@ int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, 
 
     //request the gpu process
     if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
-                                     &event);
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
+                                     &event[1]);
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
-                                  &event, &event);
+                                  &event[1], &event[2]);
 
     //wait for outputs
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[2]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -487,7 +487,7 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
-    cl_event event;
+    cl_event event[5];
 
     //create memory objects
 
@@ -500,7 +500,7 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), input, 0,
-                                   NULL,  &event);
+                                   NULL,  &event[0]);
 
     //create kernel
     if (ret == CL_SUCCESS)
@@ -518,17 +518,17 @@ int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, 
 
     //request the gpu process
     if (ret == 0)
-        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event,
-                                     &event);
+        ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
+                                     &event[1]);
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
-                                  &event, &event);
+                                  &event[1], &event[2]);
 
     //wait for outputs
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[2]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -563,7 +563,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
     index_holder index_holder = generate_indexes(width, height, min_required_pixels);
 
-    cl_event event;
+    cl_event event[5];
 
     cl_int ret = CL_SUCCESS;
     cl_mem input_mem_obj = NULL;
@@ -686,7 +686,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
             }
             //let all computations for the previous diagonal to complete then continue ( this is all non-blocking for the cpu)
             if (ret == CL_SUCCESS){
-                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event);
+                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event[0]);
             }
             totalOffset += diaLen;
             if (ret == CL_SUCCESS && gpu->verbose){
@@ -701,10 +701,10 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
-                                  output, 1, &event, &event);
+                                  output, 1, &event[0], &event[1]);
 
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[1]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -896,6 +896,8 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
     cl_mem output_mem_obj = NULL;
     cl_kernel kernel = NULL;
 
+    cl_event event[5];
+
     //create memory objects
 
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
@@ -942,7 +944,10 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
-                                  output, 0, NULL, NULL);
+                                  output, 0, NULL, &event[0]);
+
+    if (ret == CL_SUCCESS)
+        ret = clWaitForEvents(1, &event[0]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
@@ -968,7 +973,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     size_t buffer_size = (size_t)width * height * 2;
     size_t output_size = (size_t)width * (height + 1) * 3;
 
-    cl_event event;
+    cl_event event[5];
 
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
@@ -1083,7 +1088,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
             }
             //let all computations for the previous row to complete then continue ( this is all non-blocking for the cpu)
             if (ret == CL_SUCCESS){
-                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event);
+                ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, &event[0]);
             }
 
             totalOffset += width;
@@ -1099,7 +1104,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     unsigned int error_status = 0;
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
-                                  &error_status, 1, &event, &event);
+                                  &error_status, 1, &event[0], &event[1]);
 
     if (ret == CL_SUCCESS && error_status > 0) {
         fprintf(stderr, "Kernel returned error!\n");
@@ -1108,14 +1113,14 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, max_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
-                                  computed_max_minecraft_y, 1, &event, &event);
+                                  computed_max_minecraft_y, 1, &event[1], &event[2]);
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned int),
-                                  output, 1, &event, &event);
+                                  output, 1, &event[2], &event[3]);
 
     if (ret == CL_SUCCESS)
-        ret = clWaitForEvents(1, &event);
+        ret = clWaitForEvents(1, &event[3]);
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
