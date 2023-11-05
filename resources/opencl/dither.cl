@@ -146,9 +146,9 @@ __kernel void error_bleed(
     float rand = noise[i];
 
     //have the probability heavily tipped towards high coords[1] levels
-    float f_x = abs(curr_mc_height)/ (float)max_mc_height;
-    float compare = (pow((float)reference, f_x) - 1) / (reference - 1);
-
+    float f_x = (float)(abs_mc_height) / max_mc_height;
+    //float compare = (powf((float)reference, f_x) - 1) / (reference - 1);
+    float compare = -log(1 - f_x) / 3;
 
     if (max_mc_height > 0 && rand < compare){
         blacklisted_states[SIGN(curr_mc_height) + 1] = true;
