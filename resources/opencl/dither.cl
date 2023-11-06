@@ -7,8 +7,6 @@
 
 // functions
 
-#define SIGN(x) ((x > 0) - (x < 0))
-
 #define SQR(x) ((x)*(x))
 
 float deltaHsqr(float4 lab1, float4 lab2){
@@ -150,7 +148,7 @@ __kernel void error_bleed(
     float compare = -log(1 - f_x) / 3;
 
     if (max_mc_height > 0 && rand < compare){
-        blacklisted_states[SIGN(curr_mc_height) + 1] = true;
+        blacklisted_states[ (int)sign((float)curr_mc_height) + 1 ] = true;
         if (rand < compare - 0.005f){
             blacklisted_states[1] = true;
         }
@@ -204,7 +202,7 @@ __kernel void error_bleed(
                 tmp_mc_height = LIQUID_DEPTH[min_state];
             }else{
                 //if we're changing direction reset to 0
-                if ( SIGN(delta) == - SIGN(curr_mc_height) ){
+                if ( (int)sign((float)delta) == - (int)sign((float)curr_mc_height) ){
                     tmp_mc_height = delta;
                     //printf("Pixel %d %d reset height was: %d\n", coords[0] , coords[1], curr_mc_height);
                 }else
