@@ -130,15 +130,17 @@ __kernel void palette_to_height(
                     o_pixel = vload3(tmp_o, dst);
 
                     //shift the staircase to accomodate the new block
-                    o_pixel[1] -= delta;
-                    o_pixel[2] -= delta;
+                    long2 tmp_height = (o_pixel[1], o_pixel[2]);
+                    tmp_height -= delta;
 
                     //check if we are pushing the staircase out of the world
-                    if (o_pixel[1] < 0 || (max_mc_height > 0 && o_pixel[2] > max_mc_height)){
+                    if (tmp_height[0] < 0 || (max_mc_height > 0 && tmp_height[1] > max_mc_height)){
                         printf("Error: Pixel (%d,%d) crashed a staircase y:%d-%d\n", (uint)x, (uint)y, o_pixel[1], o_pixel[2]);
                         atomic_or(error, 1);
                     }else{
                         //save the new positions
+                        o_pixel[1] = tmp_height[0];
+                        o_pixel[2] = tmp_height[1];
                         vstore3(o_pixel, tmp_o, dst);
                     }
                 }
