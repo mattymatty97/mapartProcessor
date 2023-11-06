@@ -31,10 +31,10 @@ __kernel void palette_to_height(
                 __global uchar         *liquid_palette_ids,
                 __global uint          *dst,
                 __global uint          *error,
-                __global volatile int  *mc_height,
-                __global volatile uint *start_index,
-                __global volatile int  *start_padding,
-                __global volatile uint *flat_count,
+                __global int           *mc_height,
+                __global uint          *start_index,
+                __global int           *start_padding,
+                __global uint          *flat_count,
                 const uint              width,
                 const uint              height,
                 const int               max_mc_height,
@@ -82,7 +82,7 @@ __kernel void palette_to_height(
         
         //printf("Pixel %d (%d ,%d) 2\n", (uint)index, (uint)x, (unsigned int)y);
 
-        __private char delta        = block_state - 1;
+        __private char delta       = block_state - 1;
 
         __private int bottom_block = mc_height[x] + delta;
         __private int top_block    = mc_height[x] + delta;
@@ -188,10 +188,10 @@ __kernel void palette_to_height(
 
 
 __kernel void height_to_stats(
-                __global uint                  *src,
-                __global volatile uint         *layer_count,
-                __global volatile uint         *layer_id_count,
-                __global volatile uint         *id_count
+                __global uint         *src,
+                __global uint         *layer_count,
+                __global uint         *layer_id_count,
+                __global uint         *id_count
                 )
 {
 
@@ -205,7 +205,7 @@ __kernel void height_to_stats(
 
     __private uint max_layer   = og_pixel[2];
 
-    for (uchar layer = min_layer; layer <= max_layer; layer++){
+    for (__private uint layer = min_layer; layer <= max_layer; layer++){
         atomic_inc(&layer_count[layer]);
         atomic_inc(&layer_id_count[(layer * UCHAR_MAX) + block_id]);
         atomic_inc(&id_count[block_id]);

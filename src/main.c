@@ -292,7 +292,6 @@ int main(int argc, char **argv) {
 
         for (size_t i = 0; i < image.width * image.height; i++)
             noise[i] = (float) rand() / (float) RAND_MAX;
-        //noise[i] = 1;
 
         fprintf(stdout, "Do image dithering\n");
         fflush(stdout);
@@ -376,7 +375,7 @@ int main(int argc, char **argv) {
         char * filename = gen_filename(folder ,".litematica");
 
         //TODO: debug litematica code
-        litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
+        //litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
     }
 
     palette_cleanup(&processed_palette);

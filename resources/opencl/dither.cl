@@ -97,7 +97,7 @@ __kernel void error_bleed(
 
     //printf("Coords are %d %d\n", coords[0], coords[1]);
 
-    __private int curr_mc_height = mc_height[coords[0]];
+    __private volatile int curr_mc_height = mc_height[coords[0]];
 
     __private ulong i = (width * coords[1]) + coords[0];
 
@@ -158,10 +158,9 @@ __kernel void error_bleed(
     __private volatile int tmp_mc_height = curr_mc_height;
 
     __private uint abs_mc_height = abs(curr_mc_height);
-
+    
     //randomly reset the height to spread out the errors
     __private float rand = noise[i];
-
     //have the probability heavily tipped towards high y levels
     __private float f_x = (float)(abs_mc_height) / max_mc_height;
     __private float compare = -log(1 - f_x) / 3;
@@ -172,7 +171,7 @@ __kernel void error_bleed(
             blacklisted_states[1] = 1;
         }
     }
-
+    
     //check if we're not going out of build limit
     while(!valid){
 
@@ -199,8 +198,8 @@ __kernel void error_bleed(
                     if ( ( liquid_palette_ids[p] && blacklisted_liquid_states[s]) || ( !liquid_palette_ids[p] && blacklisted_states[s]) ){
                         continue;
                     }
-                    int palette_index = p * 3 + s;
-                    float4 palette = vload4(palette_index, Palette);
+                    __private int palette_index = p * 3 + s;
+                    __private float4 palette = vload4(palette_index, Palette);
 
                     tmp_d = pixel - palette;
 

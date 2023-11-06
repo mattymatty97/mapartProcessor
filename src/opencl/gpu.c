@@ -1268,7 +1268,7 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
 
         for (unsigned int x = 0; x < width; x++){
             unsigned int count = 0;
-            for (long long c_x = x, c_y = 0; c_x >= 0 && c_y < height; c_y += 1, c_x -= steepness, i++, count++){
+            for (long c_x = x, c_y = 0; c_x >= 0 && c_y < height; c_y += 1, c_x -= steepness, i++, count++){
                 holder.indexes[i*2] = c_x;
                 holder.indexes[(i*2) + 1] = c_y;
             }
@@ -1278,7 +1278,7 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
         for (unsigned int y = 1; y < height; y++) {
             for (long offset = steepness - 1; offset >= 0; offset--) {
                 unsigned int count = 0;
-                for (long long c_x = width - 1 - offset, c_y = y; c_x >= 0 && c_y < height; c_y += 1, c_x -= steepness, i++, count++){
+                for (long c_x = width - 1 - offset, c_y = y; c_x >= 0 && c_y < height; c_y += 1, c_x -= steepness, i++, count++){
                     holder.indexes[i*2] = c_x;
                     holder.indexes[(i*2) + 1] = c_y;
                 }
