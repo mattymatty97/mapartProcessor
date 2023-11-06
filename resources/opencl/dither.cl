@@ -7,6 +7,8 @@
 
 // functions
 
+#define SIGN(x) ((x > 0) - (x < 0))
+
 #define SQR(x) ((x)*(x))
 
 float deltaHsqr(float4 lab1, float4 lab2){
@@ -70,7 +72,7 @@ __kernel void error_bleed(
                     __global uchar         *valid_palette_ids,
                     __global uchar         *liquid_palette_ids,
                     __global float         *noise,
-                    __global volatile int  *mc_height,
+                    __global int           *mc_height,
                     __global uint          *coord_list,
                     const uint              width,
                     const uint              height,
@@ -117,20 +119,20 @@ __kernel void error_bleed(
     float4 tmp_d2 = FLT_MAX;
     float tmp_d2_sum = FLT_MAX;
 
-    bool valid = false;
+    uchar valid = false;
 
-    bool blacklisted_states[3] = {};
-    bool blacklisted_liquid_states[3] = {};
+    uchar3 blacklisted_states = {};
+    uchar3 blacklisted_liquid_states = {};
 
     if (max_mc_height == 0){
-        blacklisted_states[0] = true;
-        blacklisted_states[2] = true;
-        blacklisted_liquid_states[0] = true;
-        blacklisted_liquid_states[1] = true;
+        blacklisted_states[0] = 1;
+        blacklisted_states[2] = 1;
+        blacklisted_liquid_states[0] = 1;
+        blacklisted_liquid_states[1] = 1;
     }else {
         for(char state = 0; state < 3; state++){
             if (LIQUID_DEPTH[state] > max_mc_height)
-                blacklisted_liquid_states[state] = true;
+                blacklisted_liquid_states[state] = 1;
         }
     }
 
@@ -148,9 +150,9 @@ __kernel void error_bleed(
     float compare = -log(1 - f_x) / 3;
 
     if (max_mc_height > 0 && rand < compare){
-        blacklisted_states[ (int)sign((float)curr_mc_height) + 1 ] = true;
+        blacklisted_states[SIGN(curr_mc_height) + 1] = 1;
         if (rand < compare - 0.005f){
-            blacklisted_states[1] = true;
+            blacklisted_states[1] = 1;
         }
     }
 
@@ -172,10 +174,13 @@ __kernel void error_bleed(
         for(unsigned char p = 1; p < palette_indexes; p++){
             //if (coords[0] == 0 && coords[1] == 0)
             //    printf("palette %d has validity of %d\n", p, valid_palette_ids[p]);
+            //printf("Pixel %3u %3u has state -1 %d\n", coords[0] , coords[1], (int)blacklisted_states[0]);
+            //printf("Pixel %3u %3u has state 0  %d\n", coords[0] , coords[1], (int)blacklisted_states[1]);
+            //printf("Pixel %3u %3u has state 1  %d\n", coords[0] , coords[1], (int)blacklisted_states[2]);
             if (valid_palette_ids[p])
                 for (unsigned char s = 0; s < 3; s++){
                     if ( ( ( liquid_palette_ids[p] ) ? (blacklisted_liquid_states[s]) : (blacklisted_states[s]) ) ){
-                            continue;
+                        continue;
                     }
                     int palette_index = p * 3 + s;
                     float4 palette = vload4(palette_index, Palette);
@@ -202,7 +207,7 @@ __kernel void error_bleed(
                 tmp_mc_height = LIQUID_DEPTH[min_state];
             }else{
                 //if we're changing direction reset to 0
-                if ( (int)sign((float)delta) == - (int)sign((float)curr_mc_height) ){
+                if ( SIGN(delta) == - SIGN(curr_mc_height) ){
                     tmp_mc_height = delta;
                     //printf("Pixel %d %d reset height was: %d\n", coords[0] , coords[1], curr_mc_height);
                 }else
@@ -212,7 +217,7 @@ __kernel void error_bleed(
             valid = abs( tmp_mc_height ) < max_mc_height;
             if (!valid){
                 blacklisted_states[min_state] = true;
-                if ( noise[i] > 0.5f)
+                if ( rand > 0.5f)
                     blacklisted_states[1] = true;
                 printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
             }
@@ -228,14 +233,18 @@ __kernel void error_bleed(
     //printf("Result Pixel %d %d is %d %d\n", coords[0] , coords[1], (int)min_index ,(int)min_state);
     vstore2((uchar2)(min_index, min_state), i, dst);
 
-    int error_index;
-    int4 dst_error;
-
     for (uchar j = 0; j < bleeding_size; j++){
         int4 param = vload4(j, bleeding_params);
+
+        long2 new_coords;
+        new_coords[0] = (long)coords[0] + (long)param[0];
+        new_coords[1] = (long)coords[1] + (long)param[1];
+
         //do not go out or range
-        if (( coords[0] + param[0] ) >= 0 &&  ( coords[0] + param[0]) < width && ( coords[1] + param[1]) >= 0 && ( coords[1] + param[1]) < height){
-            error_index =  (width * ( coords[1] + param[1])) + coords[0] + param[0];
+        if ( new_coords[0] >= 0L && new_coords[0] < width 
+        &&   new_coords[1] >= 0L && new_coords[1] < height){
+
+            uint error_index =  (width * new_coords[1]) + new_coords[0];
             float4 spread_error = (min_d * param[2] / param[3]);
             float4 dst_pixel = vload4(error_index, src);
 

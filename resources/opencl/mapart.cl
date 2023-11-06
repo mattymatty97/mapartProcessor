@@ -34,6 +34,7 @@ __kernel void palette_to_height(
                 __global volatile int  *mc_height,
                 __global volatile uint *start_index,
                 __global volatile int  *start_padding,
+                __global volatile uint *flat_count,
                 const uint              width,
                 const uint              height,
                 const int               max_mc_height,
@@ -62,6 +63,7 @@ __kernel void palette_to_height(
             mc_height[x]     = 0;
             start_index[x]   = 0;
             start_padding[x] = -1;
+            flat_count[x]    = 0;
         }
 
         if (y == 0){
@@ -86,7 +88,7 @@ __kernel void palette_to_height(
             //if is transparent
             bottom_block     = 0;
             top_block        = 0;
-            start_index[x]   = y;
+            start_index[x]   = y + 1;
             start_padding[x] = 0;
         }else if (liquid_palette_ids[block_id]){
             //if it is liquid
@@ -97,7 +99,7 @@ __kernel void palette_to_height(
         }else{
 
             //printf("Pixel %d (%d ,%d) 3\n", (uint)index, (uint)x, (unsigned int)y);
-            if (SIGN(mc_height) == -SIGN(delta)){
+            if (SIGN(mc_height[x]) == -SIGN(delta)){
                 //if we're changing direction ( was staircase up and now is down )
                 //drop down to y0
                 bottom_block     = 0;
@@ -105,7 +107,14 @@ __kernel void palette_to_height(
                 //set this as start of the downards staircase
                 start_index[x]   = y;
                 //tell that it is possible to raise the block before if we reach it's height
-                start_padding[x] = -1;
+                start_padding[x] = -flat_count[x];
+            }
+
+            
+            if (delta == 0){
+                flat_count[x] ++;
+            }else{
+                flat_count[x] = 0;
             }
 
             
@@ -113,17 +122,24 @@ __kernel void palette_to_height(
 
             if (bottom_block < 0 || (max_mc_height > 0 && top_block > max_mc_height)){
                 //if the block would be out of the world
-                //check if we are touching another block
-                size_t tmp_y = start_index[x];
-                size_t tmp_o = (width * ( tmp_y + 1 + start_padding[x])) + x;
-                uint3 o_pixel = vload3(tmp_o, dst);
 
-                //printf("Pixel %d (%d ,%d) 5\n", (uint)index, (uint)x, (unsigned int)y);
+                //check the start of the staircase
+                long tmp_y = (long)start_index[x];
 
-                //if we are, shift the loop to include it too
-                if (o_pixel[2] >= top_block - 1)
-                    tmp_y += start_index[x];
+                //if there are an extra blocks before the staircase
+                if (start_padding[x] != 0){
+                    size_t tmp_o = ( width * ( tmp_y + 1 ) + x );
+                    uint3 s_pixel = vload3(tmp_o, dst);
+                    tmp_o = (width * ( tmp_y + 1 + (long)start_padding[x] ) + x);
+                    uint3 p_pixel = vload3(tmp_o, dst);
 
+                    //if the block is at our height or one higher include it in the staircase
+                    if (s_pixel[2] == (p_pixel[2] - 1) || s_pixel[2] == p_pixel[2])
+                        tmp_y += (long)start_padding[x];
+                }
+
+                size_t tmp_o;
+                uint3 o_pixel;
                 //loop over the entire staircase
                 for (;tmp_y < y && atomic_and(error, 1) != 0 ; tmp_y++){
                     tmp_o = (width * (tmp_y + 1)) + x;
@@ -142,6 +158,8 @@ __kernel void palette_to_height(
                         o_pixel[1] = tmp_height[0];
                         o_pixel[2] = tmp_height[1];
                         vstore3(o_pixel, tmp_o, dst);
+
+                        atomic_max(computed_max, tmp_height[1]);
                     }
                 }
 

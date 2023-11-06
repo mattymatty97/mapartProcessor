@@ -522,7 +522,7 @@ int get_palette(mapart_palette *palette_o) {
 
         target = cJSON_GetObjectItemCaseSensitive(palette_json, "support_block_id");
         if (target != NULL && cJSON_IsString(target)){
-            palette_o->support_block = t_strdup(target->string);
+            palette_o->support_block = t_strdup(target->valuestring);
             target = NULL;
         }
 
@@ -600,7 +600,7 @@ int get_palette(mapart_palette *palette_o) {
 
                 element_target = cJSON_GetObjectItemCaseSensitive(element, "block_id");
                 if (element_target != NULL && cJSON_IsString(element_target)){
-                    palette_block_ids[color_id] = t_strdup(element_target->string);
+                    palette_block_ids[color_id] = t_strdup(element_target->valuestring);
                     element_target = NULL;
                 }
 

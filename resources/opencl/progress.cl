@@ -9,7 +9,5 @@ __kernel void progress(
 
     percentage *= 100;
 
-    printf("Current Progress is %f%%", percentage);
-    printf(" %u/", i);
-    printf("%u pixels\n", total);
+    printf("Current Progress is %f%% %llu/%llu pixels\n", percentage, i, total);
 }

@@ -983,6 +983,7 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     cl_mem height_mem_obj = NULL;
     cl_mem index_mem_obj = NULL;
     cl_mem padding_mem_obj = NULL;
+    cl_mem flat_mem_obj = NULL;
     cl_mem max_mem_obj = NULL;
     cl_kernel kernel = NULL;
     cl_kernel progress_kernel = NULL;
@@ -1012,6 +1013,9 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         padding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(int), NULL, &ret);
 
     if (ret == CL_SUCCESS)
+        flat_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(unsigned int), NULL, &ret);
+
+    if (ret == CL_SUCCESS)
         max_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,sizeof(unsigned int), NULL, &ret);
 
     //request clean the error indicator
@@ -1021,15 +1025,6 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, NULL);
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
-    if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &pattern, sizeof(int), 0, sizeof(unsigned int), 0,  NULL, NULL);
-    if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, index_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
-
-    int padding_pattern = -1;
-
-    if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, padding_mem_obj, &padding_pattern, sizeof(int), 0, sizeof(unsigned int), 0,  NULL, NULL);
 
     //let all the fill operations complete first
     if (ret == CL_SUCCESS){
@@ -1058,6 +1053,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &index_mem_obj);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &padding_mem_obj);
+    if (ret == CL_SUCCESS)
+        ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &flat_mem_obj);
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &width);
     if (ret == CL_SUCCESS)
