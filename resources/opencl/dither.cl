@@ -11,6 +11,12 @@
 
 #define SQR(x) ((x)*(x))
 
+#define DELTA_TO_STATE(x) ((x < 0) ? (0) : ( (x == 0) ? (1) : (2) ) )
+
+__constant char delta_states[3] = { -1, 0 , 1 };
+
+#define STATE_TO_DELTA(x) ( delta_states[x] )
+
 float deltaHsqr(float4 lab1, float4 lab2){
     float xDE = sqrt(SQR(lab2[1]) + SQR(lab2[2])) - sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
 
@@ -66,8 +72,8 @@ float deltaCMC(float4 lab1, float4 lab2){
 
 __kernel void error_bleed(
                     __global float         *src,      
-                    __global uchar         *dst,      
-                    __global float         *err_buf,
+                    __global uchar         *dst,
+                    __global int           *err_buf,
                     __global float         *Palette,
                     __global uchar         *valid_palette_ids,
                     __global uchar         *liquid_palette_ids,
@@ -80,7 +86,7 @@ __kernel void error_bleed(
                     __global int           *bleeding_params,
                     const uchar             bleeding_size,
                     const uchar             min_progress,
-                    const int              max_mc_height)
+                    const int               max_mc_height)
 {
 
     __private uint index = get_global_id(0);
@@ -98,8 +104,8 @@ __kernel void error_bleed(
     __private float4 og_pixel = vload4(i, src);
 
     //printf("Pixel %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], og_pixel[0], og_pixel[1], og_pixel[2], og_pixel[3]);
-
-    __private float4 error = vload4(i, err_buf);
+    __private int4   round_error = vload4(i, err_buf);
+    __private float4 error = convert_float_sat(round_error) / 1000.f;
 
     //printf("Error at %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], error[0], error[1], error[2], error[3]);
 
@@ -121,8 +127,8 @@ __kernel void error_bleed(
 
     __private uchar  valid = 0;
 
-    __private uchar3 blacklisted_states = 0;
-    __private uchar3 blacklisted_liquid_states = 0;
+    __private volatile uchar  blacklisted_states[3] = {};
+    __private volatile uchar  blacklisted_liquid_states[3] = {};
 
     if (max_mc_height == 0){
         blacklisted_states[0] = 1;
@@ -149,7 +155,7 @@ __kernel void error_bleed(
     }
 
 
-    __private int tmp_mc_height = curr_mc_height;
+    __private volatile int tmp_mc_height = curr_mc_height;
 
     __private uint abs_mc_height = abs(curr_mc_height);
 
@@ -159,8 +165,9 @@ __kernel void error_bleed(
     //have the probability heavily tipped towards high y levels
     __private float f_x = (float)(abs_mc_height) / max_mc_height;
     __private float compare = -log(1 - f_x) / 3;
+
     if (max_mc_height > 0 && rand < compare){
-        blacklisted_states[SIGN(curr_mc_height) + 1] = 1;
+        blacklisted_states[DELTA_TO_STATE(SIGN(curr_mc_height))] = 1;
         if (rand < compare - 0.005f){
             blacklisted_states[1] = 1;
         }
@@ -189,7 +196,7 @@ __kernel void error_bleed(
             //printf("Pixel %3u %3u has state  1 %d\n", coords[0] , coords[1], (int)blacklisted_states[2]);
             if (valid_palette_ids[p])
                 for (__private uchar s = 0; s < 3; s++){
-                    if ( ( ( liquid_palette_ids[p] ) ? (blacklisted_liquid_states[s]) : (blacklisted_states[s]) ) ){
+                    if ( ( liquid_palette_ids[p] && blacklisted_liquid_states[s]) || ( !liquid_palette_ids[p] && blacklisted_states[s]) ){
                         continue;
                     }
                     int palette_index = p * 3 + s;
@@ -203,13 +210,13 @@ __kernel void error_bleed(
                         min_d2_sum = tmp_d2_sum;
                         min_index = p;
                         min_state = s;
-                        min_d = tmp_d + 0;
+                        min_d = tmp_d;
                     }
 
                 }
         }
 
-        __private char delta = (char)min_state - 1;
+        __private char delta = STATE_TO_DELTA(min_state);
         if (max_mc_height > 0 && min_index != 0){
             if (liquid_palette_ids[min_index]){
                 printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
@@ -217,7 +224,7 @@ __kernel void error_bleed(
                 tmp_mc_height = LIQUID_DEPTH[min_state];
             }else{
                 //if we're changing direction reset to 0
-                if ( SIGN(delta) == - SIGN(curr_mc_height) ){
+                if ( delta == - SIGN(curr_mc_height) ){
                     tmp_mc_height = delta;
                     //printf("Pixel %d %d reset height was: %d\n", coords[0] , coords[1], curr_mc_height);
                 }else
@@ -226,14 +233,14 @@ __kernel void error_bleed(
 
             valid = abs( tmp_mc_height ) < max_mc_height;
             if (!valid){
-                blacklisted_states[min_state] = true;
+                blacklisted_states[min_state] = 1;
                 if ( rand > 0.5f)
-                    blacklisted_states[1] = true;
+                    blacklisted_states[1] = 1;
                 printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
             }
 
         }else{
-            valid = true;
+            valid = 1;
             tmp_mc_height = 0;
         }
     }
@@ -255,22 +262,23 @@ __kernel void error_bleed(
         if ( new_coords[0] >= 0L && new_coords[0] < width 
         &&   new_coords[1] >= 0L && new_coords[1] < height){
 
-            __private uint error_index =  (width * new_coords[1]) + new_coords[0];
-            __private float4 spread_error = (min_d * param[2] / param[3]);
+            __private uint   error_index =  (width * new_coords[1]) + new_coords[0];
+            __private float4 spread_error = (min_d * (float)param[2] / (float)param[3]);
+            __private int4   round_spread_error = convert_int_sat_rtz((spread_error * 1000.f));
             __private float4 dst_pixel = vload4(error_index, src);
 
             __private float dH = deltaHsqr(pixel, dst_pixel);
             __private float dA = pixel[3] - dst_pixel[3];
 
-            err_buf[(error_index * 4) + 0]  += spread_error[0];
+            atomic_add(     &(err_buf[(error_index * 4) + 0]) , round_spread_error[0] );
 
             if (dH < 400){
-                err_buf[(error_index * 4) + 1]  += spread_error[1];
-                err_buf[(error_index * 4) + 2]  += spread_error[2];
+                atomic_add( &(err_buf[(error_index * 4) + 1]) , round_spread_error[1] );
+                atomic_add( &(err_buf[(error_index * 4) + 2]) , round_spread_error[2] );
             }
 
             if (dA < 128){
-                err_buf[(error_index * 4) + 3]  += spread_error[3];
+                atomic_add( &(err_buf[(error_index * 4) + 3]) , round_spread_error[3] );
             }
         }
     }

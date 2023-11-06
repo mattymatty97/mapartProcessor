@@ -588,7 +588,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
                                         output_size * sizeof(unsigned char), NULL, &ret);
     if (ret == CL_SUCCESS)
         error_buf_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
-                                           buffer_size * sizeof(float), NULL, &ret);
+                                           buffer_size * sizeof(int), NULL, &ret);
     if (ret == CL_SUCCESS)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          palette_size * sizeof(float), palette, &ret);
@@ -616,7 +616,7 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     int i_pattern = 0;
 
     if (ret == CL_SUCCESS)
-        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &pattern, sizeof (float), 0, buffer_size * sizeof(float), 0, NULL, NULL);
+        ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &i_pattern, sizeof (int), 0, buffer_size * sizeof(int), 0, NULL, NULL);
     if (ret == CL_SUCCESS)
             ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &i_pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
 
