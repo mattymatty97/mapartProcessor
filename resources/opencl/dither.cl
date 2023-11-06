@@ -67,7 +67,7 @@ float deltaCMC(float4 lab1, float4 lab2){
 __kernel void error_bleed(
                     __global float         *src,      
                     __global uchar         *dst,      
-                    __global float         *err_buf,     
+                    __global float         *err_buf,
                     __global float         *Palette,
                     __global uchar         *valid_palette_ids,
                     __global uchar         *liquid_palette_ids,
@@ -83,46 +83,46 @@ __kernel void error_bleed(
                     const int              max_mc_height)
 {
 
-    uint index = get_global_id(0);
+    __private uint index = get_global_id(0);
 
     //printf("Index was %d \n", index);
 
-    uint2 coords = vload2(index, coord_list);
+    __private uint2 coords = vload2(index, coord_list);
 
     //printf("Coords are %d %d\n", coords[0], coords[1]);
 
-    int curr_mc_height = mc_height[coords[0]];
+    __private int curr_mc_height = mc_height[coords[0]];
 
-    ulong i = (width * coords[1]) + coords[0];
+    __private ulong i = (width * coords[1]) + coords[0];
 
-    float4 og_pixel = vload4(i, src);
+    __private float4 og_pixel = vload4(i, src);
 
     //printf("Pixel %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], og_pixel[0], og_pixel[1], og_pixel[2], og_pixel[3]);
 
-    float4 error = vload4(i, err_buf);
+    __private float4 error = vload4(i, err_buf);
 
     //printf("Error at %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], error[0], error[1], error[2], error[3]);
 
-    float4 pixel = og_pixel + error;
+    __private float4 pixel = og_pixel + error;
 
     //restrict in Lab colorspace
     pixel = max(min(pixel,(float4)(100.0, 128.0, 128.0, 255.0)),(float4)(0.0,-128.0,-128.0, 0.0));
 
     //printf("Pixel %d %d after error is [%f, %f, %f, %f]\n", coords[0] , coords[1], pixel[0], pixel[1], pixel[2], pixel[3]);
 
-    float4 min_d = 0;
-    float min_d2_sum = FLT_MAX;
-    unsigned char min_index = 0;
-    unsigned char min_state = 0;
+    __private float4 min_d = 0;
+    __private float  min_d2_sum = FLT_MAX;
+    __private uchar  min_index = 0;
+    __private uchar  min_state = 0;
 
-    float4 tmp_d = 0;
-    float4 tmp_d2 = FLT_MAX;
-    float tmp_d2_sum = FLT_MAX;
+    __private float4 tmp_d = 0;
+    __private float4 tmp_d2 = FLT_MAX;
+    __private float  tmp_d2_sum = FLT_MAX;
 
-    uchar valid = false;
+    __private uchar  valid = 0;
 
-    uchar3 blacklisted_states = {};
-    uchar3 blacklisted_liquid_states = {};
+    __private uchar3 blacklisted_states = 0;
+    __private uchar3 blacklisted_liquid_states = 0;
 
     if (max_mc_height == 0){
         blacklisted_states[0] = 1;
@@ -130,25 +130,35 @@ __kernel void error_bleed(
         blacklisted_liquid_states[0] = 1;
         blacklisted_liquid_states[1] = 1;
     }else {
-        for(char state = 0; state < 3; state++){
+        for(__private char state = 0; state < 3; state++){
             if (LIQUID_DEPTH[state] > max_mc_height)
                 blacklisted_liquid_states[state] = 1;
         }
     }
 
-    int tmp_mc_height = curr_mc_height;
+    //if there is a previous pixel
+    if ( coords[1] > 0 ) {
+        __private uint p_i = (width * (coords[1] - 1)) + coords[0]; ;
+        __private uchar2 prev = vload2(p_i, dst);
+        //if the previous pixel was transparent
+        if (prev[0] == 0){
+            //only valid state is up!
+            blacklisted_states[0] = 1;
+            blacklisted_states[1] = 1;
+        }
+    }
 
-    uint abs_mc_height = abs(curr_mc_height);
 
-    uint reference = max_mc_height / 2;
+    __private int tmp_mc_height = curr_mc_height;
+
+    __private uint abs_mc_height = abs(curr_mc_height);
 
     //randomly reset the height to spread out the errors
-    float rand = noise[i];
+    __private float rand = noise[i];
 
-    //have the probability heavily tipped towards high coords[1] levels
-    float f_x = (float)(abs_mc_height) / max_mc_height;
-    float compare = -log(1 - f_x) / 3;
-
+    //have the probability heavily tipped towards high y levels
+    __private float f_x = (float)(abs_mc_height) / max_mc_height;
+    __private float compare = -log(1 - f_x) / 3;
     if (max_mc_height > 0 && rand < compare){
         blacklisted_states[SIGN(curr_mc_height) + 1] = 1;
         if (rand < compare - 0.005f){
@@ -156,7 +166,7 @@ __kernel void error_bleed(
         }
     }
 
-    //check if we're not going our of build limit
+    //check if we're not going out of build limit
     while(!valid){
 
         min_d = 0;
@@ -171,14 +181,14 @@ __kernel void error_bleed(
         min_d[3] = Palette[3] - pixel[3];
         min_d2_sum = SQR(min_d[3]);
 
-        for(unsigned char p = 1; p < palette_indexes; p++){
+        for(__private uchar p = 1; p < palette_indexes; p++){
             //if (coords[0] == 0 && coords[1] == 0)
             //    printf("palette %d has validity of %d\n", p, valid_palette_ids[p]);
             //printf("Pixel %3u %3u has state -1 %d\n", coords[0] , coords[1], (int)blacklisted_states[0]);
-            //printf("Pixel %3u %3u has state 0  %d\n", coords[0] , coords[1], (int)blacklisted_states[1]);
-            //printf("Pixel %3u %3u has state 1  %d\n", coords[0] , coords[1], (int)blacklisted_states[2]);
+            //printf("Pixel %3u %3u has state  0 %d\n", coords[0] , coords[1], (int)blacklisted_states[1]);
+            //printf("Pixel %3u %3u has state  1 %d\n", coords[0] , coords[1], (int)blacklisted_states[2]);
             if (valid_palette_ids[p])
-                for (unsigned char s = 0; s < 3; s++){
+                for (__private uchar s = 0; s < 3; s++){
                     if ( ( ( liquid_palette_ids[p] ) ? (blacklisted_liquid_states[s]) : (blacklisted_states[s]) ) ){
                         continue;
                     }
@@ -199,7 +209,7 @@ __kernel void error_bleed(
                 }
         }
 
-        char delta = min_state - 1;
+        __private char delta = (char)min_state - 1;
         if (max_mc_height > 0 && min_index != 0){
             if (liquid_palette_ids[min_index]){
                 printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
@@ -224,6 +234,7 @@ __kernel void error_bleed(
 
         }else{
             valid = true;
+            tmp_mc_height = 0;
         }
     }
 
@@ -233,10 +244,10 @@ __kernel void error_bleed(
     //printf("Result Pixel %d %d is %d %d\n", coords[0] , coords[1], (int)min_index ,(int)min_state);
     vstore2((uchar2)(min_index, min_state), i, dst);
 
-    for (uchar j = 0; j < bleeding_size; j++){
-        int4 param = vload4(j, bleeding_params);
+    for (__private uchar j = 0; j < bleeding_size; j++){
+        __private int4 param = vload4(j, bleeding_params);
 
-        long2 new_coords;
+        __private long2 new_coords;
         new_coords[0] = (long)coords[0] + (long)param[0];
         new_coords[1] = (long)coords[1] + (long)param[1];
 
@@ -244,13 +255,12 @@ __kernel void error_bleed(
         if ( new_coords[0] >= 0L && new_coords[0] < width 
         &&   new_coords[1] >= 0L && new_coords[1] < height){
 
-            uint error_index =  (width * new_coords[1]) + new_coords[0];
-            float4 spread_error = (min_d * param[2] / param[3]);
-            float4 dst_pixel = vload4(error_index, src);
+            __private uint error_index =  (width * new_coords[1]) + new_coords[0];
+            __private float4 spread_error = (min_d * param[2] / param[3]);
+            __private float4 dst_pixel = vload4(error_index, src);
 
-
-            float dH = deltaHsqr(pixel, dst_pixel);
-            float dA = pixel[3] - dst_pixel[3];
+            __private float dH = deltaHsqr(pixel, dst_pixel);
+            __private float dA = pixel[3] - dst_pixel[3];
 
             err_buf[(error_index * 4) + 0]  += spread_error[0];
 

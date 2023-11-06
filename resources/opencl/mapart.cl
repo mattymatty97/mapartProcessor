@@ -41,23 +41,23 @@ __kernel void palette_to_height(
                 __global uint          *computed_max)
 {
 
-    size_t index        = get_global_id(0);
+    __private size_t index        = get_global_id(0);
 
-    uint x              = index % width;
+    __private uint x              = index % width;
 
-    uint y              = index / width;
+    __private uint y              = index / width;
 
-    size_t o            = (width * (y + 1)) + x;
+    __private size_t o            = (width * (y + 1)) + x;
 
     //printf("Pixel %d (%d ,%d) 1\n", (uint)index, (uint)x, (unsigned int)y);
 
     if (atomic_and(error, 1) == 0){
 
-        uchar2 og_pixel   = vload2(index, src);
+        __private uchar2 og_pixel   = vload2(index, src);
 
-        uchar block_id    = og_pixel[0];
+        __private uchar block_id    = og_pixel[0];
 
-        uchar block_state = og_pixel[1];
+        __private uchar block_state = og_pixel[1];
 
         if (y == 0){
             mc_height[x]     = 0;
@@ -69,6 +69,9 @@ __kernel void palette_to_height(
         if (y == 0){
             if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 1){
                 vstore3((uint3){UCHAR_MAX,0,0}, x ,dst);
+                if (!liquid_palette_ids[block_id] && block_state == 1){
+                    flat_count[x] = 1;
+                }
             }else if (block_state == 0){
                 vstore3((uint3){UCHAR_MAX,1,1}, x ,dst);
             }else if (block_state == 2){
@@ -79,10 +82,10 @@ __kernel void palette_to_height(
         
         //printf("Pixel %d (%d ,%d) 2\n", (uint)index, (uint)x, (unsigned int)y);
 
-        char delta        = block_state - 1;
+        __private char delta        = block_state - 1;
 
-        int bottom_block = mc_height[x] + delta;
-        int top_block    = mc_height[x] + delta;
+        __private int bottom_block = mc_height[x] + delta;
+        __private int top_block    = mc_height[x] + delta;
 
         if (block_id == 0){
             //if is transparent
@@ -124,29 +127,29 @@ __kernel void palette_to_height(
                 //if the block would be out of the world
 
                 //check the start of the staircase
-                long tmp_y = (long)start_index[x];
+                __private long tmp_y = (long)start_index[x];
 
                 //if there are an extra blocks before the staircase
                 if (start_padding[x] != 0){
-                    size_t tmp_o = ( width * ( tmp_y + 1 ) + x );
-                    uint3 s_pixel = vload3(tmp_o, dst);
+                    __private size_t tmp_o = ( width * ( tmp_y + 1 ) + x );
+                    __private uint3 s_pixel = vload3(tmp_o, dst);
                     tmp_o = (width * ( tmp_y + 1 + (long)start_padding[x] ) + x);
-                    uint3 p_pixel = vload3(tmp_o, dst);
+                    __private uint3 p_pixel = vload3(tmp_o, dst);
 
                     //if the block is at our height or one higher include it in the staircase
                     if (s_pixel[2] == (p_pixel[2] - 1) || s_pixel[2] == p_pixel[2])
                         tmp_y += (long)start_padding[x];
                 }
 
-                size_t tmp_o;
-                uint3 o_pixel;
+                __private size_t tmp_o;
+                __private uint3 o_pixel;
                 //loop over the entire staircase
                 for (;tmp_y < y && atomic_and(error, 1) != 0 ; tmp_y++){
                     tmp_o = (width * (tmp_y + 1)) + x;
                     o_pixel = vload3(tmp_o, dst);
 
                     //shift the staircase to accomodate the new block
-                    long2 tmp_height = (o_pixel[1], o_pixel[2]);
+                    __private long2 tmp_height = (o_pixel[1], o_pixel[2]);
                     tmp_height -= delta;
 
                     //check if we are pushing the staircase out of the world
@@ -176,7 +179,7 @@ __kernel void palette_to_height(
         //printf("Pixel %d (%d ,%d) 8\n", (uint)index, (uint)x, (unsigned int)y);
         mc_height[x] = top_block;
         atomic_max(computed_max, mc_height[x]);
-        uint3 ret_pixel = {block_id, bottom_block, top_block};
+        __private uint3 ret_pixel = {block_id, bottom_block, top_block};
         vstore3(ret_pixel, o ,dst);
         //printf("Pixel %d (%d ,%d) 9\n", (uint)index, (uint)x, (unsigned int)y);
     }
@@ -192,15 +195,15 @@ __kernel void height_to_stats(
                 )
 {
 
-    size_t index     = get_global_id(0);
+    __private size_t index     = get_global_id(0);
 
-    uint3 og_pixel   = vload3(index, src);
+    __private uint3 og_pixel   = vload3(index, src);
 
-    uint block_id    = og_pixel[0];
+    __private uint block_id    = og_pixel[0];
 
-    uint min_layer   = og_pixel[1];
+    __private uint min_layer   = og_pixel[1];
 
-    uint max_layer   = og_pixel[2];
+    __private uint max_layer   = og_pixel[2];
 
     for (uchar layer = min_layer; layer <= max_layer; layer++){
         atomic_inc(&layer_count[layer]);
