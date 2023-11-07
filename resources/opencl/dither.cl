@@ -7,6 +7,12 @@
 
 // functions
 
+#define FLT_EQ(x , y) ( (x - y) > -FLT_EPSILON && (x - y) < FLT_EPSILON )
+#define FLT_LT(x , y) ( (x - y) < -FLT_EPSILON )
+#define FLT_LE(x , y) ( FLT_LT(x, y) || FLT_EQ(x, y) )
+#define FLT_GT(x , y) ( (x - y) >  FLT_EPSILON )
+#define FLT_GE(x , y) ( FLT_GT(x, y) || FLT_EQ(x, y) )
+
 #define SIGN(x) ((x > 0) - (x < 0))
 
 #define SQR(x) ((x)*(x))
@@ -104,8 +110,9 @@ __kernel void error_bleed(
     __private float4 og_pixel = vload4(i, src);
 
     //printf("Pixel %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], og_pixel[0], og_pixel[1], og_pixel[2], og_pixel[3]);
-    __private int4   round_error = vload4(i, err_buf);
-    __private float4 error = convert_float_sat(round_error) / 1000.f;
+    __private int4   int_error = vload4(i, err_buf);
+    __private float4 error = {int_error[0],int_error[1],int_error[2],int_error[3]};
+                     error /= 1000.f;
 
     //printf("Error at %d %d is [%f, %f, %f, %f]\n", coords[0] , coords[1], error[0], error[1], error[2], error[3]);
 
@@ -127,8 +134,8 @@ __kernel void error_bleed(
 
     __private uchar  valid = 0;
 
-    __private volatile uchar  blacklisted_states[3] = {};
-    __private volatile uchar  blacklisted_liquid_states[3] = {};
+    __private uchar  blacklisted_states[3] = {};
+    __private uchar  blacklisted_liquid_states[3] = {};
 
     if (max_mc_height == 0){
         blacklisted_states[0] = 1;
@@ -165,9 +172,14 @@ __kernel void error_bleed(
     __private float f_x = (float)(abs_mc_height) / max_mc_height;
     __private float compare = -log(1 - f_x) / 3;
 
-    if (max_mc_height > 0 && rand < compare){
-        blacklisted_states[DELTA_TO_STATE(SIGN(curr_mc_height))] = 1;
-        if (rand < compare - 0.005f){
+    if (max_mc_height > 0 && FLT_LT(rand, compare)){
+        if (curr_mc_height < 0){
+            blacklisted_states[0] = 1;
+        }else{
+            blacklisted_states[2] = 1;
+        }
+        
+        if (FLT_LT(rand , compare - 0.005f)){
             blacklisted_states[1] = 1;
         }
     }
@@ -205,7 +217,7 @@ __kernel void error_bleed(
 
                     tmp_d2_sum = deltaCMCsqr(pixel, palette);
 
-                    if (tmp_d2_sum < min_d2_sum){
+                    if (FLT_LT(tmp_d2_sum, min_d2_sum)){
                         min_d2_sum = tmp_d2_sum;
                         min_index = p;
                         min_state = s;
@@ -233,7 +245,7 @@ __kernel void error_bleed(
             valid = abs( tmp_mc_height ) < max_mc_height;
             if (!valid){
                 blacklisted_states[min_state] = 1;
-                if ( rand > 0.5f)
+                if ( FLT_LT(rand, 0.5f) )
                     blacklisted_states[1] = 1;
                 printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
             }
@@ -262,22 +274,25 @@ __kernel void error_bleed(
         &&   new_coords[1] >= 0L && new_coords[1] < height){
 
             __private uint   error_index =  (width * new_coords[1]) + new_coords[0];
+            
             __private float4 spread_error = (min_d * (float)param[2] / (float)param[3]);
-            __private int4   round_spread_error = convert_int_sat_rtz((spread_error * 1000.f));
+            __private float4 Mspread_error = spread_error * 1000.f;
+            __private int4   int_spread_error = {Mspread_error[0],Mspread_error[1],Mspread_error[2], Mspread_error[3]};
+
             __private float4 dst_pixel = vload4(error_index, src);
 
             __private float dH = deltaHsqr(pixel, dst_pixel);
             __private float dA = pixel[3] - dst_pixel[3];
 
-            atomic_add(     &(err_buf[(error_index * 4) + 0]) , round_spread_error[0] );
+            atomic_add(     &(err_buf[(error_index * 4) + 0]) , int_spread_error[0] );
 
-            if (dH < 400){
-                atomic_add( &(err_buf[(error_index * 4) + 1]) , round_spread_error[1] );
-                atomic_add( &(err_buf[(error_index * 4) + 2]) , round_spread_error[2] );
+            if (FLT_LT(dH, 400.f)){
+                atomic_add( &(err_buf[(error_index * 4) + 1]) , int_spread_error[1] );
+                atomic_add( &(err_buf[(error_index * 4) + 2]) , int_spread_error[2] );
             }
 
-            if (dA < 128){
-                atomic_add( &(err_buf[(error_index * 4) + 3]) , round_spread_error[3] );
+            if (FLT_LT(dA, 128.f)){
+                atomic_add( &(err_buf[(error_index * 4) + 3]) , int_spread_error[3] );
             }
         }
     }
