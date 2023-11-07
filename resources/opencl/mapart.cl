@@ -5,7 +5,7 @@
 //constants
 #define LIQUID_DEPTH (int3)(10,5,1)
 
-#define SUPPORT_BLOCK (UCHAR_MAX - 1)
+#define SUPPORT_BLOCK (UCHAR_MAX)
 
 //kernels
 
@@ -215,7 +215,7 @@ __kernel void height_to_stats(
 
     for (__private uint layer = min_layer; layer <= max_layer; layer++){
         atomic_inc(&layer_count[layer]);
-        atomic_inc(&layer_id_count[(layer * UCHAR_MAX) + block_id]);
+        atomic_inc(&layer_id_count[(layer * (UCHAR_MAX + 1) ) + block_id ]);
         atomic_inc(&id_count[block_id]);
     }
 

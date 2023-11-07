@@ -1152,8 +1152,8 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 int gpu_height_to_stats(gpu_t *gpu, unsigned int *input, unsigned int *layer_count, unsigned int *layer_id_count, unsigned int *id_count, unsigned int width, unsigned int height, unsigned int layers) {
     size_t buffer_size = (size_t)width * height * 3;
     size_t layer_size = layers;
-    size_t layer_id_size = layers * UCHAR_MAX;
-    size_t id_size = UCHAR_MAX;
+    size_t layer_id_size = layers * (UCHAR_MAX + 1);
+    size_t id_size = (UCHAR_MAX + 1);
     cl_int ret = 0;
     cl_mem input_mem_obj = NULL;
     cl_mem layer_mem_obj = NULL;
