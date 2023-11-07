@@ -5,6 +5,8 @@
 //constants
 #define LIQUID_DEPTH (int3)(10,5,1)
 
+#define SUPPORT_BLOCK (UCHAR_MAX - 1)
+
 //kernels
 
 __kernel void palette_to_rgb(
@@ -60,23 +62,27 @@ __kernel void palette_to_height(
         __private uchar block_state = og_pixel[1];
 
         if (y == 0){
+            //init this column counters
+
             mc_height[x]     = 0;
             start_index[x]   = 0;
             start_padding[x] = -1;
             flat_count[x]    = 0;
-        }
 
-        if (y == 0){
-            if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 1){
-                vstore3((uint3){UCHAR_MAX,0,0}, x ,dst);
-                if (!liquid_palette_ids[block_id] && block_state == 1){
-                    flat_count[x] = 1;
-                }
-            }else if (block_state == 0){
-                vstore3((uint3){UCHAR_MAX,1,1}, x ,dst);
-            }else if (block_state == 2){
-                vstore3((uint3){UCHAR_MAX,0,0}, x ,dst);
-                mc_height[x] = 1;
+            // set first row of support blocks
+
+
+            if (block_state == 0){
+                //if the first block goes down set the support to y1
+                vstore3((uint3){SUPPORT_BLOCK,1,1}, x ,dst);
+            } else if ( block_state == 1 ){
+                //if the first block is flat set the support block to y0 and increase the count of sequential flat blocks
+                vstore3((uint3){SUPPORT_BLOCK,0,0}, x ,dst);
+                flat_count[x] = 1;
+            }else if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 2){
+                //if the first block is transparent or liquid or goes up do not set any support block ( or set it to transparent ) and remove it from the movable blocks
+                vstore3((uint3){0,0,0}, x ,dst);
+                start_padding[x] = 0;
             }
         }
         
@@ -93,12 +99,14 @@ __kernel void palette_to_height(
             top_block        = 0;
             start_index[x]   = y + 1;
             start_padding[x] = 0;
+            flat_count[x]    = 0;
         }else if (liquid_palette_ids[block_id]){
             //if it is liquid
             bottom_block     = 0;
             top_block        = LIQUID_DEPTH[block_state];
             start_index[x]   = y;
             start_padding[x] = 0;
+            flat_count[x]    = 0;
         }else{
 
             //printf("Pixel %d (%d ,%d) 3\n", (uint)index, (uint)x, (unsigned int)y);
@@ -149,7 +157,7 @@ __kernel void palette_to_height(
                     o_pixel = vload3(tmp_o, dst);
 
                     //shift the staircase to accomodate the new block
-                    __private long2 tmp_height = (o_pixel[1], o_pixel[2]);
+                    __private int2 tmp_height = {o_pixel[1], o_pixel[2]};
                     tmp_height -= delta;
 
                     //check if we are pushing the staircase out of the world

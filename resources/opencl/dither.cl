@@ -253,6 +253,9 @@ __kernel void error_bleed(
         }else{
             valid = 1;
             tmp_mc_height = 0;
+            if ( FLT_LT(og_pixel[4], 128.f) ){
+                printf("Pixel %d %d defaulted to Transparent\n", coords[0] , coords[1]);
+            }
         }
     }
 
