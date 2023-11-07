@@ -352,8 +352,8 @@ int main(int argc, char **argv) {
 
     if (ret == 0){
         count_by_id = t_calloc(UCHAR_MAX + 1, sizeof (unsigned int));
-        count_by_layer = t_calloc(computed_max_height, sizeof (unsigned int));
-        count_by_layer_id = t_calloc(computed_max_height * ( UCHAR_MAX + 1 ), sizeof (unsigned int));
+        count_by_layer = t_calloc(computed_max_height + 1, sizeof (unsigned int));
+        count_by_layer_id = t_calloc(( computed_max_height + 1 )  * ( UCHAR_MAX + 1 ), sizeof (unsigned int));
         fprintf(stdout, "Generating Stats from converted image\n");
         fflush(stdout);
         ret = gpu_height_to_stats(&config.gpu, mapart_data.image_data, count_by_layer, count_by_layer_id, count_by_id, mapart_data.width, mapart_data.height, computed_max_height);
