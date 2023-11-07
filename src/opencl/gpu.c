@@ -1255,13 +1255,17 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
     holder.indexes = t_calloc(width*height*2, sizeof (unsigned int));
 
     if (steepness == 0){
-        holder.diagonal_count = 1;
-        holder.diagonals = t_calloc(1, sizeof (unsigned int));
-        holder.diagonals[0] = width*height;
-        for (unsigned int i = 0; i < width*height; i++){
+        holder.diagonal_count = height;
+        holder.diagonals = t_calloc(height, sizeof (unsigned int));
+
+        for (unsigned int y = 0; y < height; y++)
+            holder.diagonals[y] = width;
+
+        for (unsigned int i = 0; i < width; i++){
             holder.indexes[i*2] = i % width;
             holder.indexes[(i*2) + 1] = i / width;
         }
+
     }else{
         unsigned int i = 0;
         holder.diagonals = t_calloc(width + height * steepness, sizeof (unsigned int));
