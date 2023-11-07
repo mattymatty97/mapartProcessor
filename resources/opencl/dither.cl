@@ -21,7 +21,7 @@
 
 __constant char delta_states[3] = { -1, 0 , 1 };
 
-#define STATE_TO_DELTA(x) ( delta_states[x] )
+#define STATE_TO_DELTA(x) ( (x >= 0 && x < 3) ? delta_states[x] : 0 )
 
 float deltaHsqr(float4 lab1, float4 lab2){
     float xDE = sqrt(SQR(lab2[1]) + SQR(lab2[2])) - sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
@@ -103,7 +103,7 @@ __kernel void error_bleed(
 
     //printf("Coords are %d %d\n", coords[0], coords[1]);
 
-    __private volatile int curr_mc_height = mc_height[coords[0]];
+    __private int curr_mc_height = mc_height[coords[0]];
 
     __private ulong i = (width * coords[1]) + coords[0];
 
@@ -162,7 +162,7 @@ __kernel void error_bleed(
     }
 
 
-    __private volatile int tmp_mc_height = curr_mc_height;
+    __private int tmp_mc_height = curr_mc_height;
 
     __private uint abs_mc_height = abs(curr_mc_height);
     
