@@ -53,7 +53,8 @@ static struct option long_options[] = {
         {"random-seed",    required_argument, 0, 'r'},
         {"maximum-height", required_argument, 0, 'h'},
         {"dithering",      required_argument, 0, 'd'},
-        {"verbose",      no_argument, 0, 'v'}
+        {"verbose",      no_argument, 0, 'v'},
+        {"y0-fix",      no_argument, 0, '0'}
 };
 
 main_options config = {};
@@ -111,7 +112,7 @@ int main(int argc, char **argv) {
     unsigned long thread_count;
 
     int option_index = 0;
-    while ((c = getopt_long(argc, argv, ":i:p:d:r:h:n:t:v", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, ":i:p:d:r:h:n:t:v0", long_options, &option_index)) != -1) {
         switch (c) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
@@ -125,8 +126,11 @@ int main(int argc, char **argv) {
             case 'v':
                 config.verbose = 1;
                 break;
+            case '0':
+                config.fix_y0  = 1;
+                break;
             case 'n':
-                config.project_name = t_strdup(optarg);
+                config.project_name   = t_strdup(optarg);
                 break;
 
             case 'i':
@@ -134,20 +138,20 @@ int main(int argc, char **argv) {
                 break;
 
             case 'p':
-                config.palette_name = t_strdup(optarg);
+                config.palette_name   = t_strdup(optarg);
                 break;
 
             case 'd':
-                config.dithering = t_strdup(optarg);
+                config.dithering      = t_strdup(optarg);
                 break;
 
             case 'r':
-                config.random_seed = str_hash(optarg);
+                config.random_seed    = str_hash(optarg);
                 break;
 
             case 'h': {
                 unsigned int height = atoi(optarg);
-                if (height != 1 && height != 2)
+                if (height != 1)
                     config.maximum_height = height;
                 break;
             }
@@ -255,10 +259,14 @@ int main(int argc, char **argv) {
         //convert palette to CIE-L*ab + alpha
         if (ret == 0) {
             mapart_float_palette *Lab_palette = &processed_palette;
-            Lab_palette->palette_id_names = palette.palette_id_names;
             Lab_palette->palette_size = palette.palette_size;
+            Lab_palette->palette_id_names = palette.palette_id_names;
+            Lab_palette->palette_block_ids = palette.palette_block_ids;
+            Lab_palette->support_block = palette.support_block;
+            Lab_palette->is_supported = palette.is_supported;
             Lab_palette->is_usable = palette.is_usable;
             Lab_palette->is_liquid = palette.is_liquid;
+            Lab_palette->minecraft_data_version = palette.minecraft_data_version;
             Lab_palette->palette = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
 
 
@@ -368,13 +376,16 @@ int main(int argc, char **argv) {
         stats.volume = stats.x_length * stats.y_length * stats.z_length;
         stats.layer_id_count = count_by_layer_id;
         version_numbers versions = {};
-        versions.litematica = 1;
-        versions.mc_data = 12001;
+        versions.litematica = 6;
+        versions.mc_data = palette.minecraft_data_version;
         char * folder = "litematica/";
         mkdir(folder);
         char * filename = gen_filename(folder ,".litematica");
 
         //TODO: debug litematica code
+        //TODO: add config.fix_y0 boolean to litematica function parameters
+        //TODO: add log lines to litematica code
+        //TODO: add debug lines toggled with config.verbose to litematica code
         //litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
     }
 
@@ -522,6 +533,12 @@ int get_palette(mapart_palette *palette_o) {
         target = cJSON_GetObjectItemCaseSensitive(palette_json, "support_block_id");
         if (target != NULL && cJSON_IsString(target)){
             palette_o->support_block = t_strdup(target->valuestring);
+            target = NULL;
+        }
+
+        target = cJSON_GetObjectItemCaseSensitive(palette_json, "minecraft_data_version");
+        if (target != NULL && cJSON_IsNumber(target)){
+            palette_o->minecraft_data_version = target->valueint;
             target = NULL;
         }
 

@@ -20,6 +20,7 @@ typedef struct {
     int maximum_height;
     char *dithering;
     char verbose;
+    char fix_y0;
     gpu_t gpu;
 } main_options;
 
@@ -49,6 +50,7 @@ typedef struct {
     unsigned char *is_supported;
     unsigned char *is_usable;
     unsigned char *is_liquid;
+    unsigned int minecraft_data_version;
 } mapart_palette;
 
 typedef mapart_palette mapart_float_palette;
