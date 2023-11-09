@@ -44,7 +44,10 @@ int block_pos_data_compare(const void* v1, const void* v2)
 }
 
 char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* block_data, uint8_t** new_palette_id_map, int* new_palette_len) {
-	// Create an array to store the string values of the new condensed block palette
+    fprintf(stdout, "Getting new block palette to use\n");
+    fflush(stdout);
+
+    // Create an array to store the string values of the new condensed block palette
 	// The palette is padded in the front with air
 	char** new_block_palette = t_calloc(block_palette->palette_size + 1, sizeof(char*));
 	new_block_palette[0] = "minecraft:air";
@@ -55,6 +58,7 @@ char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* blo
 	*new_palette_id_map = t_calloc(256, sizeof(uint8_t));
 	(*new_palette_id_map)[UCHAR_MAX] = 1;
 
+    int channels = block_data->channels;
 	unsigned int* iter = block_data->image_data;
 	unsigned int cur_block_id;
 	for (int i = 0; i < block_data->width * block_data->height; i++) {
@@ -65,7 +69,7 @@ char** get_new_block_palette(mapart_palette* block_palette, image_uint_data* blo
 			(*new_palette_id_map)[cur_block_id] = *new_palette_len;
 			(*new_palette_len)++;
 		}
-		iter += 3; // Add 3 because there are 3 channels in block_data->image_data
+		iter += channels;
 	}
 
 	return new_block_palette;
@@ -89,34 +93,43 @@ bool is_upwards_shift_needed(mapart_palette* block_palette, mapart_stats* stats)
 }
 
 block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_uint_data* block_data, int upwards_shift, int* supported_block_data_len) {
-	// Create an array to store all the new block data including the supporting blocks
+    fprintf(stdout, "Getting block data with supporting blocks\n");
+    fflush(stdout);
+
+    // Create an array to store all the new block data including the supporting blocks
 	// Each block stores its block_id and its x, y, and z positions relative to the mapart origin
-	// Size allocated to the array is double the size of incoming block_data to account for worst-case scenario of all blocks requiring support
-	block_pos_data* supported_block_data = t_calloc((int64_t)block_data->width * block_data->height * 2, sizeof(block_pos_data));
+	// Size allocated to the array is 20x the size of incoming block_data to account for worst-case scenario of all blocks requiring support and all blocks being 10-deep water
+	block_pos_data* supported_block_data = t_calloc((int64_t)block_data->width * block_data->height * 20, sizeof(block_pos_data));
 
 	*supported_block_data_len = 0;
 	unsigned int* in_iter = block_data->image_data;
 	block_pos_data* out_iter = supported_block_data;
 
+    int channels = block_data->channels;
 	unsigned int cur_block_id;
-	unsigned int cur_height;
-	for (int x = 0; x < block_data->width; x++) {
-		for (int z = 0; z < block_data->height; z++) {
+	int cur_height;
+	for (int z = 0; z < block_data->height; z++) {
+		for (int x = 0; x < block_data->width; x++) {
 			cur_block_id = *in_iter;
-			cur_height = *(in_iter + 1) + upwards_shift;
+            for (cur_height = (int)(*(in_iter + 2)) + upwards_shift; cur_height >= (int)(*(in_iter + 1)) + upwards_shift; cur_height--) {
+                // Add the block data to the new array
+                out_iter->block_id = cur_block_id;
+                out_iter->x = x;
+                out_iter->y = cur_height;
+                out_iter->z = z;
 
-			// Add the block data to the new array
-			out_iter->block_id = cur_block_id;
-			out_iter->x = x;
-			out_iter->y = cur_height;
-			out_iter->z = z;
+                if (*(in_iter + 2) != *(in_iter + 1)) {
+                    fflush(stderr);
+                }
 
-			(*supported_block_data_len)++;
-			in_iter += 3; // Add 3 because there are 3 channels in block_data->image_data
-			out_iter++;
+                (*supported_block_data_len)++;
+                out_iter++;
+            }
+            cur_height++;
+			in_iter += channels;
 
 			// Add support block underneath if required
-			if (block_palette->is_supported[cur_block_id]) {
+			if (cur_block_id < block_palette->palette_size && block_palette->is_supported[cur_block_id]) {
 				out_iter->block_id = UCHAR_MAX; // Support block_id is always 255
 				out_iter->x = x;
 				out_iter->y = cur_height - 1;
@@ -132,20 +145,24 @@ block_pos_data* get_supported_block_data(mapart_palette* block_palette, image_ui
 }
 
 int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_len, mapart_stats* stats, int block_palette_len, uint8_t* new_block_palette_id_map, int* bit_packed_block_data_len) {
-	int bits_per_block = log2(block_palette_len) + 1;
-	*bit_packed_block_data_len = (int)ceil(stats->volume * bits_per_block / 64.0);
+    fprintf(stdout, "Getting bit-packed block data\n");
+    fflush(stdout);
+
+    int bits_per_block = (int)log2(block_palette_len - 1) + 1;
+    uint64_t total_bits = stats->volume * bits_per_block;
+	*bit_packed_block_data_len = (int)(total_bits >> 6) + ((total_bits & 63) > 0);
 	int64_t* bit_packed_block_data = t_calloc(*bit_packed_block_data_len, sizeof(int64_t));
 
 	int64_t* curr_bit_section = bit_packed_block_data; // The 64-bit section that is currently being written to
 	int section_index = 0; // The index in the 64-bit section that we are at, from right to left
 	int section_bits_left = 64; // The number of bits left to be written to the current section
-	block_pos_data prev_block = { 0, 0, 0, 0 };
+	block_pos_data prev_block = { 0, -1, 0, 0 };
 
 	uint64_t block_id, air_gap;
 	for (int i = 0; i < block_data_len; i++) {
 		block_id = new_block_palette_id_map[block_data[i].block_id];
-		air_gap = (uint64_t)(block_data[i].x - prev_block.x)
-				+ (uint64_t)(block_data[i].z - prev_block.z) * stats->x_length
+		air_gap = (int64_t)(block_data[i].x - prev_block.x)
+				+ (int64_t)(block_data[i].z - prev_block.z) * stats->x_length
 				+ (uint64_t)(block_data[i].y - prev_block.y) * stats->x_length * stats->z_length
 				- 1;
 
@@ -157,39 +174,27 @@ int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_le
 				section_index += air_bits;
 				section_bits_left -= air_bits;
 			}
-			// If the air bits completely fill up the current section
-			else if (section_bits_left == air_bits) {
-				curr_bit_section++;
-				section_index = 0;
-				section_bits_left = 64;
-			}
-			// If the air bits are greater than the remaining bits in the current section
+			// If the air bits are greater than or equal to the remaining bits in the current section
 			else {
 				air_bits -= section_bits_left; // Remove the bits remaining for the current section
-				curr_bit_section += air_bits >> 6; // Shift the current section forward
-				section_index = air_bits - (air_bits >> 6); // Set the current section's index to the number of air bits remaining after the section shift
+				curr_bit_section += (air_bits >> 6) + 1; // Shift the current section forward
+				section_index = air_bits & 63; // Set the current section's index to the number of air bits remaining after the section shift
 				section_bits_left = 64 - section_index;
 			}
 		}
 
-		// Very similar logic as above
+		// Very similar logic as above but for a single block instead of multiple
 		if (section_bits_left > bits_per_block) {
 			*curr_bit_section |= block_id << section_index;
-			section_index += bits_per_block;
+            section_index += bits_per_block;
 			section_bits_left -= bits_per_block;
-		}
-		else if (section_bits_left == bits_per_block) {
-			*curr_bit_section |= block_id << section_index;
-			curr_bit_section++;
-			section_index = 0;
-			section_bits_left = 64;
 		}
 		else {
 			*curr_bit_section |= block_id << section_index;
 			curr_bit_section++;
 			*curr_bit_section |= block_id >> section_bits_left;
-			section_index = 0;
-			section_bits_left = 64;
+			section_index = bits_per_block - section_bits_left;
+			section_bits_left = 64 - section_index;
 		}
 		
 		prev_block = block_data[i];
@@ -199,7 +204,10 @@ int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_le
 }
 
 void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data) {
-	// Buffer for string manipulation
+    fprintf(stdout, "Creating litematica file from image\n");
+    fflush(stdout);
+
+    // Buffer for string manipulation
 	char buffer[1000] = { 0 };
 
 	// Get the new palette to use for the blocks
@@ -218,6 +226,9 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	// Update the height of the mapart if necessary and calculate the total volume
 	stats->y_length += upwards_shift;
 	stats->volume = (uint64_t)stats->x_length * stats->y_length * stats->z_length;
+
+    fprintf(stdout, "Starting NBT file creation\n");
+    fflush(stdout);
 
 	nbt_tag_t* tagTop = create_compound_tag("");
 	{
@@ -298,6 +309,9 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	t_free(new_block_palette);
 	t_free(new_palette_id_map);
 	t_free(supported_block_data);
+
+    fprintf(stdout, "Saving litematica file\n");
+    fflush(stdout);
 
 	// Save the litematic
 	sprintf(buffer, "%s.litematic", file_name);

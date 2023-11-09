@@ -372,21 +372,18 @@ int main(int argc, char **argv) {
         mapart_stats stats = {};
         stats.x_length = mapart_data.width;
         stats.z_length = mapart_data.height;
-        stats.y_length = computed_max_height;
-        stats.volume = stats.x_length * stats.y_length * stats.z_length;
+        stats.y_length = computed_max_height + 1;
         stats.layer_id_count = count_by_layer_id;
         version_numbers versions = {};
         versions.litematica = 6;
         versions.mc_data = palette.minecraft_data_version;
         char * folder = "litematica/";
         mkdir(folder);
-        char * filename = gen_filename(folder ,".litematica");
+        char * filename = gen_filename(folder ,"");
 
-        //TODO: debug litematica code
         //TODO: add config.fix_y0 boolean to litematica function parameters
-        //TODO: add log lines to litematica code
         //TODO: add debug lines toggled with config.verbose to litematica code
-        //litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
+        litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
     }
 
     palette_cleanup(&processed_palette);

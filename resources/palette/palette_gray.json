@@ -49,7 +49,7 @@
     {
       "id": 3,
       "name": "WOOL",
-      "block_id": "minecraft:mushroom_stem[down=true, east=true, north=true, south=true, up=true, west=true]",
+      "block_id": "minecraft:mushroom_stem",
       "color": [
         199,
         199,
