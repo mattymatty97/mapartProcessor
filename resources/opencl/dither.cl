@@ -263,7 +263,7 @@ __kernel void error_bleed(
 
     //printf("Pixel %d %d Error is [%f,%f,%f,%f]\n", coords[0] , coords[1], min_d[0], min_d[1], min_d[2], min_d[3]);
     //printf("Result Pixel %d %d is %d %d\n", coords[0] , coords[1], (int)min_index ,(int)min_state);
-    vstore2((uchar2)(min_index, min_state), i, dst);
+    vstore2((uchar2){min_index, min_state}, i, dst);
 
     for (__private uchar j = 0; j < bleeding_size; j++){
         __private int4 param = vload4(j, bleeding_params);

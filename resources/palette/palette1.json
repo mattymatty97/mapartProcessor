@@ -166,7 +166,7 @@
     {
       "id": 12,
       "name": "WATER",
-      "block_id": "minecraft:oak_leaves[waterlogged=true]",
+      "block_id": "minecraft:water",
       "color": [
         64,
         64,

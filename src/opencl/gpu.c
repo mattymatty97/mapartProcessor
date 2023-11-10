@@ -1020,11 +1020,20 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 
     //request clean the error indicator
     unsigned int pattern = 0;
+    int pattern2 = 1;
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, NULL);
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
+    if (ret == CL_SUCCESS)
+        ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    if (ret == CL_SUCCESS)
+            ret = clEnqueueFillBuffer(gpu->commandQueue, index_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    if (ret == CL_SUCCESS)
+            ret = clEnqueueFillBuffer(gpu->commandQueue, padding_mem_obj, &pattern2, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    if (ret == CL_SUCCESS)
+            ret = clEnqueueFillBuffer(gpu->commandQueue, flat_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
 
     //let all the fill operations complete first
     if (ret == CL_SUCCESS){

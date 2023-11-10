@@ -45,9 +45,9 @@ __kernel void palette_to_height(
 
     __private size_t index        = get_global_id(0);
 
-    __private uint x              = index % width;
+    __private int x              = index % width;
 
-    __private uint y              = index / width;
+    __private int y              = index / width;
 
     __private size_t o            = (width * (y + 1)) + x;
 
@@ -62,12 +62,6 @@ __kernel void palette_to_height(
         __private uchar block_state = og_pixel[1];
 
         if (y == 0){
-            //init this column counters
-
-            mc_height[x]     = 0;
-            start_index[x]   = 0;
-            start_padding[x] = -1;
-            flat_count[x]    = 0;
 
             // set first row of support blocks
 
@@ -82,16 +76,19 @@ __kernel void palette_to_height(
             }else if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 2){
                 //if the first block is transparent or liquid or goes up do not set any support block ( or set it to transparent ) and remove it from the movable blocks
                 vstore3((uint3){0,0,0}, x ,dst);
-                start_padding[x] = 0;
+                start_padding[x] =  0;
+                mc_height[x]     = -1;
             }
         }
         
-        //printf("Pixel %d (%d ,%d) 2\n", (uint)index, (uint)x, (unsigned int)y);
+        __private int curr_mc_height = mc_height[x];
 
-        __private char delta       = block_state - 1;
+        __private char delta       = ((char)block_state) - 1;
 
-        __private int bottom_block = mc_height[x] + delta;
-        __private int top_block    = mc_height[x] + delta;
+        __private int bottom_block = curr_mc_height + delta;
+        __private int top_block    = curr_mc_height + delta;
+        
+        //printf("Pixel (%d ,%d) b%d t%d d%d\n", (uint)x, (uint)y, (int)bottom_block, (int)top_block, (int)delta);
 
         if (block_id == 0){
             //if is transparent
@@ -109,8 +106,8 @@ __kernel void palette_to_height(
             flat_count[x]    = 0;
         }else{
 
-            //printf("Pixel %d (%d ,%d) 3\n", (uint)index, (uint)x, (unsigned int)y);
-            if (SIGN(mc_height[x]) == -SIGN(delta)){
+            if (delta < 0 && curr_mc_height > 0){
+                //printf("Pixel (%d ,%d) reset c%d d%d\n", (uint)x, (uint)y, (int)curr_mc_height, (int)delta);
                 //if we're changing direction ( was staircase up and now is down )
                 //drop down to y0
                 bottom_block     = 0;
@@ -118,7 +115,7 @@ __kernel void palette_to_height(
                 //set this as start of the downards staircase
                 start_index[x]   = y;
                 //tell that it is possible to raise the block before if we reach it's height
-                start_padding[x] = -flat_count[x];
+                start_padding[x] = flat_count[x];
             }
 
             
@@ -135,29 +132,39 @@ __kernel void palette_to_height(
                 //if the block would be out of the world
 
                 //check the start of the staircase
-                __private long tmp_y = (long)start_index[x];
+                __private int tmp_y = (int)start_index[x];
+
+                
+                //printf("Pixel (%d ,%d) shifed staircase c%d d%d y%d\n", (uint)x, (uint)y, (int)curr_mc_height, (int)delta, (int)tmp_y);
 
                 //if there are an extra blocks before the staircase
                 if (start_padding[x] != 0){
-                    __private size_t tmp_o = ( width * ( tmp_y + 1 ) + x );
-                    __private uint3 s_pixel = vload3(tmp_o, dst);
-                    tmp_o = (width * ( tmp_y + 1 + (long)start_padding[x] ) + x);
-                    __private uint3 p_pixel = vload3(tmp_o, dst);
+                    __private size_t tmp_o;
+                    __private uint3 s_pixel;
+                    if (tmp_y < y){
+                        tmp_o = (width * ( tmp_y + 1 ) + x);
+                        s_pixel = vload3(tmp_o, dst);
+                    }else{
+                        s_pixel = (uint3){block_id, bottom_block, top_block};
+                    }
+                    tmp_o = (width * ( tmp_y + 1 - (int)start_padding[x] ) + x);
+                    __private uint3 p_pixel = vload3(tmp_o, dst);;
 
                     //if the block is at our height or one higher include it in the staircase
                     if (s_pixel[2] == (p_pixel[2] - 1) || s_pixel[2] == p_pixel[2])
-                        tmp_y += (long)start_padding[x];
+                        tmp_y -= (int)start_padding[x];
                 }
 
                 __private size_t tmp_o;
                 __private uint3 o_pixel;
                 //loop over the entire staircase
-                for (;tmp_y < y && atomic_and(error, 1) != 0 ; tmp_y++){
+                for (;tmp_y < y && ( atomic_and(error, 1) == 0 ) ; tmp_y++){
+                    //printf("Pixel (%d ,%d) shifed (%d, %d) \n", (uint)x, (uint)y, (int)x, (int)tmp_y);
                     tmp_o = (width * (tmp_y + 1)) + x;
                     o_pixel = vload3(tmp_o, dst);
 
                     //shift the staircase to accomodate the new block
-                    __private int2 tmp_height = {o_pixel[1], o_pixel[2]};
+                    __private int2 tmp_height = {(int)o_pixel[1], (int)o_pixel[2]};
                     tmp_height -= delta;
 
                     //check if we are pushing the staircase out of the world
@@ -186,7 +193,7 @@ __kernel void palette_to_height(
         
         //printf("Pixel %d (%d ,%d) 8\n", (uint)index, (uint)x, (unsigned int)y);
         mc_height[x] = top_block;
-        atomic_max(computed_max, mc_height[x]);
+        atomic_max(computed_max, top_block);
         __private uint3 ret_pixel = {block_id, bottom_block, top_block};
         vstore3(ret_pixel, o ,dst);
         //printf("Pixel %d (%d ,%d) 9\n", (uint)index, (uint)x, (unsigned int)y);
