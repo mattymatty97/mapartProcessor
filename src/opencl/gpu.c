@@ -30,6 +30,8 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
     gpu_holder->verbose = config->verbose;
 
+    unsigned int total_devices = 0;
+
     cl_int ret = clGetPlatformIDs(3, platform_id, &ret_num_platforms);
     if (ret == CL_SUCCESS) {
         for (int i = 0; i < ret_num_platforms; i++) {
@@ -40,37 +42,45 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
                 ret = clGetDeviceInfo(device_id[i][j], CL_DEVICE_NAME, sizeof(char) * 300, device_names[i][j],
                                       NULL);
             }
+            total_devices += ret_num_devices[i];
         }
     }
 
-    fprintf(stdout, "found %d devices on %d platforms: \n",
-            (ret_num_devices[0] + ret_num_devices[1] + ret_num_devices[2]), ret_num_platforms);
-    for (int i = 0; i < ret_num_platforms; i++) {
-        fprintf(stdout, "\t%s: \n", platform_names[i]);
-        for (int j = 0; j < ret_num_devices[i]; j++) {
-            fprintf(stdout, "\t%2d %2d - %s\n", i, j, device_names[i][j]);
-        }
-    }
 
     int platform_index = -1;
     int device_index = -1;
-    while (platform_index < 0 || platform_index >= ret_num_platforms || device_index < 0 ||
-           device_index >= ret_num_devices[platform_index]) {
-        fprintf(stdout, "please select a device to use (%%d %%d):\n");
+
+    if (total_devices > 0) {
+        fprintf(stdout, "found %d devices on %d platforms: \n",
+                total_devices, ret_num_platforms);
+        for (int i = 0; i < ret_num_platforms; i++) {
+            fprintf(stdout, "\t%s: \n", platform_names[i]);
+            for (int j = 0; j < ret_num_devices[i]; j++) {
+                fprintf(stdout, "\t%2d %2d - %s\n", i, j, device_names[i][j]);
+            }
+        }
+        while (platform_index < 0 || platform_index >= ret_num_platforms || device_index < 0 ||
+               device_index >= ret_num_devices[platform_index]) {
+            fprintf(stdout, "please select a device to use (%%d %%d):\n");
+            fflush(stdout);
+            fflush(stdin);
+            fscanf(stdin, "%d %d", &platform_index, &device_index);
+        }
+
+        fprintf(stdout, "Selected %s from %s\n", device_names[platform_index][device_index],
+                platform_names[platform_index]);
         fflush(stdout);
-        fflush(stdin);
-        fscanf(stdin, "%d %d", &platform_index, &device_index);
+
+        gpu_holder->platformId = platform_id[platform_index];
+        gpu_holder->deviceId = device_id[platform_index][device_index];
+
+        ret = clGetDeviceInfo(gpu_holder->deviceId, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t),
+                              &gpu_holder->max_parallelism, NULL);
+    }else{
+        fprintf(stderr, "No OpenCL compatible devices found!\n");
+        fflush(stderr);
+        ret = EXIT_FAILURE;
     }
-
-    fprintf(stdout, "Selected %s from %s\n", device_names[platform_index][device_index],
-            platform_names[platform_index]);
-    fflush(stdout);
-
-    gpu_holder->platformId = platform_id[platform_index];
-    gpu_holder->deviceId = device_id[platform_index][device_index];
-
-    ret = clGetDeviceInfo(gpu_holder->deviceId, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t),
-                          &gpu_holder->max_parallelism, NULL);
 
     cl_context context;
     if (ret == CL_SUCCESS)
@@ -1270,7 +1280,7 @@ index_holder generate_indexes(unsigned int width, unsigned int height, unsigned 
         for (unsigned int y = 0; y < height; y++)
             holder.diagonals[y] = width;
 
-        for (unsigned int i = 0; i < width; i++){
+        for (unsigned int i = 0; i < width * height; i++){
             holder.indexes[i*2] = i % width;
             holder.indexes[(i*2) + 1] = i / width;
         }

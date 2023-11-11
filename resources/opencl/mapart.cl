@@ -3,7 +3,7 @@
 #define SIGN(x) ((x > 0) - (x < 0))
 
 //constants
-#define LIQUID_DEPTH (int3)(10,5,1)
+#define LIQUID_DEPTH (int3)(10,5,0)
 
 #define SUPPORT_BLOCK (UCHAR_MAX)
 
@@ -105,37 +105,21 @@ __kernel void palette_to_height(
             start_padding[x] = 0;
             flat_count[x]    = 0;
         }else{
-
-            if (delta < 0 && curr_mc_height > 0){
-                //printf("Pixel (%d ,%d) reset c%d d%d\n", (uint)x, (uint)y, (int)curr_mc_height, (int)delta);
-                //if we're changing direction ( was staircase up and now is down )
-                //drop down to y0
-                bottom_block     = 0;
-                top_block        = 0;
-                //set this as start of the downards staircase
-                start_index[x]   = y;
-                //tell that it is possible to raise the block before if we reach it's height
-                start_padding[x] = flat_count[x];
-            }
-
-            
-            if (delta == 0){
-                flat_count[x] ++;
-            }else{
-                flat_count[x] = 0;
-            }
-
-            
-            //printf("Pixel %d (%d ,%d) 4\n", (uint)index, (uint)x, (unsigned int)y);
-
-            if (bottom_block < 0 || (max_mc_height > 0 && top_block > max_mc_height)){
-                //if the block would be out of the world
+            if (delta == -1){
+                //if the staircase is going down
+                if (curr_mc_height > 0){
+                    //if we were in a raising staircase
+                    //drop down to y0
+                    bottom_block     = 0;
+                    top_block        = 0;
+                    //set this as start of the downards staircase
+                    start_index[x]   = y;
+                    //tell that it is possible to raise the block before if we reach it's height
+                    start_padding[x] = flat_count[x];
+                }
 
                 //check the start of the staircase
                 __private int tmp_y = (int)start_index[x];
-
-                
-                //printf("Pixel (%d ,%d) shifed staircase c%d d%d y%d\n", (uint)x, (uint)y, (int)curr_mc_height, (int)delta, (int)tmp_y);
 
                 //if there are an extra blocks before the staircase
                 if (start_padding[x] != 0){
@@ -159,16 +143,15 @@ __kernel void palette_to_height(
                 __private uint3 o_pixel;
                 //loop over the entire staircase
                 for (;tmp_y < y && ( atomic_and(error, 1) == 0 ) ; tmp_y++){
-                    //printf("Pixel (%d ,%d) shifed (%d, %d) \n", (uint)x, (uint)y, (int)x, (int)tmp_y);
                     tmp_o = (width * (tmp_y + 1)) + x;
                     o_pixel = vload3(tmp_o, dst);
 
                     //shift the staircase to accomodate the new block
                     __private int2 tmp_height = {(int)o_pixel[1], (int)o_pixel[2]};
-                    tmp_height -= delta;
+                    tmp_height += 1;
 
                     //check if we are pushing the staircase out of the world
-                    if (tmp_height[0] < 0 || (max_mc_height > 0 && tmp_height[1] > max_mc_height)){
+                    if (max_mc_height > 0 && tmp_height[1] > max_mc_height){
                         printf("Error: Pixel (%d,%d) crashed a staircase y:%d-%d\n", (uint)x, (uint)y, o_pixel[1], o_pixel[2]);
                         atomic_or(error, 1);
                     }else{
@@ -177,26 +160,34 @@ __kernel void palette_to_height(
                         o_pixel[2] = tmp_height[1];
                         vstore3(o_pixel, tmp_o, dst);
 
+                        //update the maximum height
                         atomic_max(computed_max, tmp_height[1]);
                     }
                 }
 
-                //printf("Pixel %d (%d ,%d) 6\n", (uint)index, (uint)x, (unsigned int)y);
-                //we have moved by
-                bottom_block -= delta;
-                top_block    -= delta;
+                //we have are back at y0
+                bottom_block = 0;
+                top_block    = 0;
 
             }
+
+            // update the count of flat blocks
+            if (delta == 0){
+                flat_count[x] ++;
+            }else{
+                flat_count[x] = 0;
+            }
             
-            //printf("Pixel %d (%d ,%d) 7\n", (uint)index, (uint)x, (unsigned int)y);
         }
         
-        //printf("Pixel %d (%d ,%d) 8\n", (uint)index, (uint)x, (unsigned int)y);
+        //update the current height
         mc_height[x] = top_block;
+        //update the maximum height
         atomic_max(computed_max, top_block);
+
+        //store the position
         __private uint3 ret_pixel = {block_id, bottom_block, top_block};
         vstore3(ret_pixel, o ,dst);
-        //printf("Pixel %d (%d ,%d) 9\n", (uint)index, (uint)x, (unsigned int)y);
     }
 }
 

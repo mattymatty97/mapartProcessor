@@ -1,5 +1,5 @@
 //constants
-#define LIQUID_DEPTH (int3)(10,5,1)
+#define LIQUID_DEPTH (int3)(10,5,0)
 
 #define WHT_L 1.8f
 

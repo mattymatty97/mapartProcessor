@@ -316,4 +316,5 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	// Save the litematic
 	sprintf(buffer, "%s.litematic", file_name);
 	write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
+    fflush(stdout);
 }
