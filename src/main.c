@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
+#include <float.h>
 
 #include "libs/alloc/tracked.h"
 
@@ -296,10 +297,19 @@ int main(int argc, char **argv) {
         fflush(stdout);
         float *noise = t_calloc((size_t)image.width * image.height, sizeof(float));
 
-        srand(config.random_seed);
-
-        for (size_t i = 0; i < image.width * image.height; i++)
-            noise[i] = (float) rand() / (float) RAND_MAX;
+        //if the image is smaller or equal to the worse case staircase
+        //compute as if there was no limit ( no random height drops )
+        if (config.maximum_height >= image.height) {
+            // fill the buffer with values outside the comparator function range
+            for (size_t i = 0; i < image.width * image.height; i++)
+                noise[i] = FLT_MAX;
+        }else{
+            // initialize the random
+            srand(config.random_seed);
+            // generate a random [0,1] value for each index
+            for (size_t i = 0; i < image.width * image.height; i++)
+                noise[i] = (float) rand() / (float) RAND_MAX;
+        }
 
         fprintf(stdout, "Do image dithering\n");
         fflush(stdout);

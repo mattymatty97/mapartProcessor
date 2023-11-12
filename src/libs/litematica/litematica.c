@@ -482,5 +482,10 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 
 	// Save the litematic
 	sprintf(buffer, "%s.litematic", file_name);
+    clock_t start = clock();
 	write_nbt_file(buffer, tagTop, NBT_WRITE_FLAG_USE_GZIP);
+    clock_t stop = clock();
+    double delta = (double)(stop - start) / CLOCKS_PER_SEC;
+    fprintf(stdout, "Saved in %.5lf s\n", delta);
+    fflush(stdout);
 }
