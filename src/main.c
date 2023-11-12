@@ -1,3 +1,5 @@
+#define PROGRAM_NAME "mapartProcessor-v1.3.1"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -63,6 +65,7 @@ main_options config = {};
 #define RGB_SIZE 3
 #define RGBA_SIZE 4
 #define MULTIPLIER_SIZE 3
+#define MAX_PALETTE_SIZE 200
 
 //----------------DEFINITIONS---------------
 
@@ -393,7 +396,7 @@ int main(int argc, char **argv) {
 
         //TODO: add config.fix_y0 boolean to litematica function parameters
         //TODO: add debug lines toggled with config.verbose to litematica code
-        litematica_create("mapartProcessor", config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
+        litematica_create(PROGRAM_NAME, config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
     }
 
     palette_cleanup(&processed_palette);
@@ -561,6 +564,9 @@ int get_palette(mapart_palette *palette_o) {
         target = cJSON_GetObjectItemCaseSensitive(palette_json, "colors");
         if (target != NULL && cJSON_IsArray(target)){
             cJSON *element;
+
+            palette_block_ids[0] = "minecraft:glass";
+
             cJSON_ArrayForEach(element, target){
                 cJSON *element_target;
 
@@ -639,6 +645,19 @@ int get_palette(mapart_palette *palette_o) {
                     element_target = NULL;
                 }
             }
+
+
+            //set the forced values for id 0 ( Transparency )
+            for (int i = 0; i < MULTIPLIER_SIZE; i++) {
+                unsigned int p_i = (MULTIPLIER_SIZE * RGBA_SIZE) + (i * RGBA_SIZE);
+                palette[p_i + 0] = 0;
+                palette[p_i + 1] = 0;
+                palette[p_i + 2] = 0;
+                palette[p_i + 3] = 0;
+            }
+
+            is_usable[0] = true;
+
         }
 
         palette_size = palette_index;
@@ -654,6 +673,13 @@ int get_palette(mapart_palette *palette_o) {
     }
 
     cJSON_Delete(palette_json);
+
+    if ( palette_o->palette_size > MAX_PALETTE_SIZE ){
+        fprintf(stderr, "Palette is too large!!! %d/%d IDs\n", palette_o->palette_size, MAX_PALETTE_SIZE);
+        fflush(stderr);
+        ret = EXIT_FAILURE;
+    }
+
     return ret;
 }
 
