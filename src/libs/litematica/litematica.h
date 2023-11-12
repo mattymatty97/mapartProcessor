@@ -1,4 +1,4 @@
-
+#include <stdbool.h>
 #include "nbt.h"
 #include "../globaldefs.h"
 
@@ -11,6 +11,7 @@ typedef struct {
 	uint16_t z_length; // The length of the 3d mapart along the z axis
 	uint64_t volume; // The total volume a box encompassing the 3d mapart would have
 	unsigned int* layer_id_count; // 2d matrix containing the block count at a given layer with a given palette id
+    bool y0Fix;
 } mapart_stats;
 
 /// <summary>
