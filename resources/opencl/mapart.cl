@@ -65,19 +65,19 @@ __kernel void palette_to_height(
 
             // set first row of support blocks
 
-
-            if (block_state == 0){
+            if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 2){
+                //if the first block is transparent or liquid or goes up do not set any support block ( or set it to transparent ) and remove it from the movable blocks
+                vstore3((uint3){0,0,0}, x ,dst);
+                start_padding[x] =  0;
+                start_index[x]   =  1;
+                mc_height[x]     = -1;
+            }else if (block_state == 0){
                 //if the first block goes down set the support to y1
                 vstore3((uint3){SUPPORT_BLOCK,1,1}, x ,dst);
             } else if ( block_state == 1 ){
                 //if the first block is flat set the support block to y0 and increase the count of sequential flat blocks
                 vstore3((uint3){SUPPORT_BLOCK,0,0}, x ,dst);
                 flat_count[x] = 1;
-            }else if (block_id == 0 || liquid_palette_ids[block_id] || block_state == 2){
-                //if the first block is transparent or liquid or goes up do not set any support block ( or set it to transparent ) and remove it from the movable blocks
-                vstore3((uint3){0,0,0}, x ,dst);
-                start_padding[x] =  0;
-                mc_height[x]     = -1;
             }
         }
         

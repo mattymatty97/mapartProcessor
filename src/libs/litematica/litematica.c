@@ -219,7 +219,7 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
     block_pos_data* iter = all_block_data;
     for (int region_index = 0; region_index < region_count; region_index++) {
         new_block_palettes[region_index] = t_calloc(UCHAR_MAX + 1, sizeof(char*));
-        (*curr_palette)[0] = strdup(air);
+        (*curr_palette)[0] = t_strdup(air);
         (*new_block_palette_lens)[region_index] = 1;
 
         for (int i = 0; i < region_block_lens[region_index]; i++) {
@@ -227,10 +227,10 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
                 // TODO: Add mushroom stem checks if they are next to each other and give them their own palette index
                 // If the block_id has not been seen before, add the block name to the new palette and initialize the id in palette_id_map
                 if (iter->block_id == UCHAR_MAX) {
-                    (*curr_palette)[(*new_block_palette_lens)[region_index]] = strdup(main_block_palette->support_block);
+                    (*curr_palette)[(*new_block_palette_lens)[region_index]] = t_strdup(main_block_palette->support_block);
                 }
                 else {
-                    (*curr_palette)[(*new_block_palette_lens)[region_index]] = strdup(main_block_palette->palette_block_ids[iter->block_id]);
+                    (*curr_palette)[(*new_block_palette_lens)[region_index]] = t_strdup(main_block_palette->palette_block_ids[iter->block_id]);
                 }
                 palette_id_map[iter->block_id] = (*new_block_palette_lens)[region_index];
                 (*new_block_palette_lens)[region_index]++;
@@ -240,6 +240,12 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
 
             iter++;
         }
+
+        //litematica only allows 2+ bit palettes, so we pad the current one if needed
+        for (int* i = &(*new_block_palette_lens)[region_index]; *i < 3; (*i)++){
+            (*curr_palette)[(*new_block_palette_lens)[region_index]] = t_strdup(air);
+        }
+
 
         // Reset the palette_id_map for the next region
         for (int i = 0; i <= UCHAR_MAX; i++) {

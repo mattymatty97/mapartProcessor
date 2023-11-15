@@ -1,7 +1,7 @@
 # Project exclude paths
 /cmake-build-**
-/.idea/
-/build/
-/images/
-/.vs
+/.idea
+/build
+/images
+/litematica
 /out/build/x64-Debug
