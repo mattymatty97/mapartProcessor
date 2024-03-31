@@ -238,10 +238,10 @@ __kernel void error_bleed(
 
             __private float4 dst_pixel = vload4(error_index, src);
 
-            __private float dE = deltaE(pixel, dst_pixel);
+            __private float dE = deltaE(og_pixel, dst_pixel);
 
             //printf("Pixel %d %d dE is %f\n", coords[0] , coords[1], dE);
-            if (FLT_LT(dE, 0.3f)){
+            if (FLT_LT(dE, 13.f)){
                 atomic_add( &(err_buf[(error_index * 4) + 0]) , int_spread_error[0] );
                 atomic_add( &(err_buf[(error_index * 4) + 1]) , int_spread_error[1] );
                 atomic_add( &(err_buf[(error_index * 4) + 2]) , int_spread_error[2] );
