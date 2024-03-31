@@ -23,55 +23,17 @@ __constant char delta_states[3] = { -1, 0 , 1 };
 
 #define STATE_TO_DELTA(x) ( (x >= 0 && x < 3) ? delta_states[x] : 0 )
 
-float deltaHsqr(float4 lab1, float4 lab2){
-    float xDE = sqrt(SQR(lab2[1]) + SQR(lab2[2])) - sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
-
-    return SQR( lab2[1] - lab1[1]) + SQR( lab2[2] - lab1[2] ) - SQR(xDE);
+float alpha(float4 op){
+    return op[3] / 255;
 }
 
-float deltaH(float4 lab1, float4 lab2){
-    return sqrt( deltaHsqr(lab1,lab2) );
+float deltaEsqr(float4 op_1, float4 op_2){
+    __private float4 delta = op_1 - op_2;
+    return SQR(delta[0]) + SQR(delta[1]) + SQR(delta[2]);
 }
 
-float deltaCMClab2Hue(float4 lab){
-    float bias = 0;
-         if (lab[1] >= 0 && lab[0] == 0 ) return 0;
-    else if (lab[1] <  0 && lab[0] == 0 ) return 180;
-    else if (lab[1] == 0 && lab[0] >  0 ) return 90;
-    else if (lab[1] == 0 && lab[0] <  0 ) return 270;
-    else if (lab[1] >  0 && lab[0] >  0 ) bias = 0;
-    else if (lab[1] <  0                ) bias = 180;
-    else if (lab[1] >  0 && lab[0] <  0 ) bias = 360;
-
-    return degrees(atan( lab[2] / lab[1] )) + bias;
-}
-
-float deltaCMCsqr(float4 lab1, float4 lab2){
-    float xC1 = sqrt( SQR(lab1[1]) + SQR(lab1[2]) );
-    float xC2 = sqrt( SQR(lab2[1]) + SQR(lab2[2]) );
-    float xff = sqrt( pow(xC1, 4) / ( pow(xC1, 4) + 1900) );
-    float xH1 = deltaCMClab2Hue(lab1);
-
-    float xTT = 0;
-    if ( xH1 < 164 || xH1 > 345) xTT = 0.36f + fabs( 0.4f * cos( radians(  35.0f + xH1 ) ) );
-    else                         xTT = 0.56f + fabs( 0.2f * cos( radians( 168.0f + xH1 ) ) );
-
-    float xSL = 0;
-    if ( lab1[0] < 16) xSL = 0.511f;
-    else               xSL = ( 0.040975f * lab1[0] ) / ( 1 + ( 0.01765f * lab1[0] ) );
-
-    float xSC = ( ( 0.0638f * xC1 ) / ( 1 + ( 0.0131f * xC1 ) ) ) + 0.638f;
-    float xSH = ( ( xff * xTT ) + 1 - xff ) * xSC;
-    float xDH = sqrt( SQR( lab2[1] - lab1[1] ) + SQR( lab2[2] - lab1[2] ) - SQR( xC2 - xC1 ) );
-          xSL = ( lab2[0] - lab1[0] ) / ( WHT_L * xSL );
-          xSC = ( xC2 - xC1 ) / ( WHT_C * xSC );
-          xSH = xDH / xSH;
-    
-    return SQR(xSL) + SQR(xSC) + SQR(xSH) + SQR(lab2[3] - lab1[3]);
-}
-
-float deltaCMC(float4 lab1, float4 lab2){
-    return sqrt( deltaCMCsqr(lab1,lab2) );
+float deltaE(float4 op_1, float4 op_2){
+    return sqrt(deltaEsqr(op_1, op_2));
 }
 
 //kernel
@@ -129,7 +91,6 @@ __kernel void error_bleed(
     __private uchar  min_state = 0;
 
     __private float4 tmp_d = 0;
-    __private float4 tmp_d2 = FLT_MAX;
     __private float  tmp_d2_sum = FLT_MAX;
 
     __private uchar  valid = 0;
@@ -193,39 +154,37 @@ __kernel void error_bleed(
         min_state = 0;
 
         tmp_d = 0;
-        tmp_d2 = FLT_MAX;
         tmp_d2_sum = FLT_MAX;
 
-        min_d[3] = Palette[3] - pixel[3];
-        min_d2_sum = SQR(min_d[3]);
+        if (alpha(pixel) > 0.3f){
+            for(__private uchar p = 1; p < palette_indexes; p++){
+                if (valid_palette_ids[p])
+                    for (__private uchar s = 0; s < 3; s++){
+                        if ( ( liquid_palette_ids[p] && blacklisted_liquid_states[s]) || ( !liquid_palette_ids[p] && blacklisted_states[s]) ){
+                            continue;
+                        }
+                        __private int palette_index = p * 3 + s;
+                        __private float4 palette = vload4(palette_index, Palette);
 
-        for(__private uchar p = 1; p < palette_indexes; p++){
-            if (valid_palette_ids[p])
-                for (__private uchar s = 0; s < 3; s++){
-                    if ( ( liquid_palette_ids[p] && blacklisted_liquid_states[s]) || ( !liquid_palette_ids[p] && blacklisted_states[s]) ){
-                        continue;
+                        tmp_d = pixel - palette;
+
+                        tmp_d2_sum = deltaEsqr(pixel, palette);
+
+                        if (FLT_LT(tmp_d2_sum, min_d2_sum)){
+                            min_d2_sum = tmp_d2_sum;
+                            min_index = p;
+                            min_state = s;
+                            min_d = tmp_d;
+                        }
+
                     }
-                    __private int palette_index = p * 3 + s;
-                    __private float4 palette = vload4(palette_index, Palette);
-
-                    tmp_d = pixel - palette;
-
-                    tmp_d2_sum = deltaCMCsqr(pixel, palette);
-
-                    if (FLT_LT(tmp_d2_sum, min_d2_sum)){
-                        min_d2_sum = tmp_d2_sum;
-                        min_index = p;
-                        min_state = s;
-                        min_d = tmp_d;
-                    }
-
-                }
+            }
         }
 
         __private char delta = STATE_TO_DELTA(min_state);
         if (max_mc_height > 0 && min_index != 0){
             if (liquid_palette_ids[min_index]){
-                printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
+                //printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
                 //if this is a liquid
                 tmp_mc_height = LIQUID_DEPTH[min_state];
             }else{
@@ -279,12 +238,11 @@ __kernel void error_bleed(
 
             __private float4 dst_pixel = vload4(error_index, src);
 
-            __private float dH = deltaHsqr(pixel, dst_pixel);
+            __private float dE = deltaE(pixel, dst_pixel);
             __private float dA = pixel[3] - dst_pixel[3];
 
-            atomic_add(     &(err_buf[(error_index * 4) + 0]) , int_spread_error[0] );
-
-            if (FLT_LT(dH, 400.f)){
+            if (FLT_LT(dE, 0.1f)){
+                atomic_add( &(err_buf[(error_index * 4) + 0]) , int_spread_error[0] );
                 atomic_add( &(err_buf[(error_index * 4) + 1]) , int_spread_error[1] );
                 atomic_add( &(err_buf[(error_index * 4) + 2]) , int_spread_error[2] );
             }

@@ -245,18 +245,18 @@ int main(int argc, char **argv) {
         Lab_image->height = image.height;
         Lab_image->channels = image.channels;
 
-        float *xyz_data = t_calloc((size_t)image.width * image.height * image.channels, sizeof(float));
+        int *composite_data = t_calloc((size_t)image.width * image.height * image.channels, sizeof(int));
 
-        fprintf(stdout, "Converting image to XYZ\n");
+        fprintf(stdout, "Converting image to black_composite\n");
         fflush(stdout);
-        ret = gpu_rgb_to_xyz(&config.gpu, int_image.image_data, xyz_data, image.width, image.height);
+        ret = gpu_rgba_to_composite(&config.gpu, int_image.image_data, composite_data, image.width, image.height);
 
         if (ret == 0) {
-            fprintf(stdout, "Converting image to CIE-L*ab\n");
+            fprintf(stdout, "Converting image to OK-L*ab\n");
             fflush(stdout);
-            ret = gpu_xyz_to_lab(&config.gpu, xyz_data, Lab_image->image_data, image.width, image.height);
+            ret = gpu_rgb_to_ok(&config.gpu, composite_data, Lab_image->image_data, image.width, image.height);
         }
-        t_free(xyz_data);
+        t_free(composite_data);
 
         image_cleanup(&int_image);
 
@@ -273,18 +273,20 @@ int main(int argc, char **argv) {
             Lab_palette->minecraft_data_version = palette.minecraft_data_version;
             Lab_palette->palette = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
 
-
-            float *palette_xyz_data = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
-            fprintf(stdout, "Converting palette to XYZ\n");
+/*
+            int *palette_xyz_data = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(int));
+            fprintf(stdout, "Converting palette to black_composite\n");
             fflush(stdout);
-            ret = gpu_rgb_to_xyz(&config.gpu, palette.palette, palette_xyz_data, MULTIPLIER_SIZE,palette.palette_size);
-
+            ret = gpu_rgba_to_composite(&config.gpu, palette.palette, palette_xyz_data, MULTIPLIER_SIZE,
+                                        palette.palette_size);
+*/
             if (ret == 0) {
-                fprintf(stdout, "Converting palette to CIE-L*ab\n");
+                fprintf(stdout, "Converting palette to OK-L*ab\n");
                 fflush(stdout);
-                ret = gpu_xyz_to_lab(&config.gpu, palette_xyz_data, Lab_palette->palette,MULTIPLIER_SIZE, palette.palette_size);
+                ret = gpu_rgb_to_ok(&config.gpu,  palette.palette, Lab_palette->palette, MULTIPLIER_SIZE,
+                                    palette.palette_size);
             }
-            t_free(palette_xyz_data);
+            //t_free(palette_xyz_data);
         }
     }
 

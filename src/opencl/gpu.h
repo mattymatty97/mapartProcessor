@@ -35,16 +35,9 @@ int gpu_init(main_options *config, gpu_t *);
 
 void gpu_clear(gpu_t *);
 
-int gpu_rgb_to_xyz(gpu_t *gpu, int *input, float *output, unsigned int width, unsigned int height);
+int gpu_rgba_to_composite(gpu_t *gpu, int *input, int *output, unsigned int width, unsigned int height);
 
-int gpu_xyz_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, unsigned int height);
-
-int gpu_xyz_to_luv(gpu_t *gpu, float *input, float *output, unsigned int width, unsigned int height);
-
-int gpu_lab_to_lch(gpu_t *gpu, float *input, float *output, unsigned int width, unsigned int height);
-
-int gpu_lch_to_lab(gpu_t *gpu, float *input, float *output, unsigned int width, unsigned int height);
-
+int gpu_rgb_to_ok(gpu_t *gpu, int *input, float *output, unsigned int width, unsigned int height);
 
 typedef int (*dither_function)(gpu_t *gpu, float *input, unsigned char *output, float *palette, unsigned char *valid_palette_ids, unsigned char *liquid_palette_ids, float *noise, unsigned int width,
                                unsigned int height, unsigned char palette_indexes,

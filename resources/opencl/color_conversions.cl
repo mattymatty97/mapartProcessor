@@ -1,29 +1,34 @@
+__kernel void rgba_composite(__global const int *In, __global int *Out) {
+    // Get the index of the current element to be processed
+    __private int i = get_global_id(0);
 
-//reference values for sRGB
-static const __constant float4 reference_srgb_10 = {
-    94.811f,
-    100.000f,
-    107.304f,
-    1.0f
+    //read the pixel
+    __private int4 rgba = vload4(i, In);
+
+    __private int3 rgb = {rgba[0], rgba[1], rgba[2]};
+
+    rgb *= rgba[3];
+    rgb /= 255;
+
+    __private int4 rgba_ = { rgb[0], rgb[1], rgb[2], rgba[3] };
+
+    vstore4(rgba_, i, Out);
+
+}
+
+static const __constant float M1[3][3] = {
+    0.4122214708f , 0.5363325363f , 0.0514459929f,
+	0.2119034982f , 0.6806995451f , 0.1073969566f,
+	0.0883024619f , 0.2817188376f , 0.6299787005f
 };
 
-static const __constant float4 reference_ICC = {
-    96.720f,
-    100.000f,
-    81.427f,
-    1.0f
+static const __constant float M2[3][3] = {
+    0.2104542553f,  0.7936177850f, -0.0040720468f,
+    1.9779984951f, -2.4285922050f,  0.4505937099f,
+    0.0259040371f,  0.7827717662f, -0.8086757660f
 };
 
-static const __constant float4 reference_srgb_2 = {
-    95.047f,
-    100.000f,
-    108.883f,
-    1.0f
-};
-
-#define reference reference_srgb_10
-
-__kernel void rgb_to_XYZ(__global const int *In, __global float *Out) {
+__kernel void rgb_to_ok(__global const int *In, __global float *Out) {
 
     // Get the index of the current element to be processed
     __private int i = get_global_id(0);
@@ -31,174 +36,25 @@ __kernel void rgb_to_XYZ(__global const int *In, __global float *Out) {
     //read the pixel
     __private int4 rgb = vload4(i, In);
 
-    //printf("Pixel %d is [%d,%d,%d,%d]\n", i, rgb[0], rgb[1], rgb[2], rgb[3]);
-    //convert to XYZ
+    //convert to okLab
 
-    __private float4 var = 0;
+    __private float3 var = {
+        rgb[0]*M1[0][0] + rgb[1]*M1[0][1] + rgb[2]*M1[0][2],
+        rgb[0]*M1[1][0] + rgb[1]*M1[1][1] + rgb[2]*M1[1][2],
+        rgb[0]*M1[2][0] + rgb[1]*M1[2][1] + rgb[2]*M1[2][2]
+    };
 
-    var = convert_float4(rgb) / 255.0f;
-    
-    for (__private int i=0; i<3; i++){
+    __private float3 var_ = cbrt(var);
 
-        if ( var[i] > 0.04045 )
-            var[i] = pow((var[i] + 0.055f) / 1.055f, 2.4f);
-        else
-            var[i] = var[i] / 12.92f;
 
-    }
-
-    //var = pow(var, 2.19921875f);
-
-    var = var * 100.0f;
-
-    //printf("var for Pixel %d is [%f,%f,%f,%f]\n", i, var[0], var[1], var[2], var[3]);
-    //write results
-
-    __private float4 XYZ = {
-        var[0] * 0.412390799265959f + var[1] * 0.357584339383878f + var[2] * 0.180480788401834f,
-        var[0] * 0.212639005871510f + var[1] * 0.715168678767756f + var[2] * 0.072192315360734f,
-        var[0] * 0.019330818715592f + var[1] * 0.119194779794626f + var[2] * 0.950532152249661f,
+    __private float4 ok = {
+        var_[0]*M2[0][0] + var_[1]*M2[0][1] + var_[2]*M2[0][2],
+        var_[0]*M2[1][0] + var_[1]*M2[1][1] + var_[2]*M2[1][2],
+        var_[0]*M2[2][0] + var_[1]*M2[2][1] + var_[2]*M2[2][2],
         rgb[3]
     };
 
-    //printf("Result Pixel %d is [%f,%f,%f,%f]\n", i, XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
-    vstore4(XYZ, i, Out);
+    vstore4(ok, i, Out);
 
 }
 
-
-__kernel void xyz_to_lab(__global const float *In, __global float *Out) {
-
-    // Get the index of the current element to be processed
-    __private int i = get_global_id(0);
-
-    //read the pixel
-    __private float4 XYZ = vload4(i, In);
-
-    __private float4 var = 0;
-
-    //printf("Pixel in [%f,%f,%f,%f]\n", XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
-
-    //convert to L*ab
-
-    var = XYZ / reference;
-    
-    for (__private int i=0; i<3; i++){
-        if ( var[i] > 0.008856 )
-            var[i] = pow(var[i] , 1/3.0f);
-        else
-            var[i] = ( var[i] * 7.787f) + (16 / 116.0f);
-    }
-    
-    __private float4 Lab = {
-        (116 * var[1]) - 16,
-        500 * (var[0] - var[1]),
-        200 * (var[1] - var[2]),
-        XYZ[3]
-    };
-
-    Lab = max(min(Lab, (float4)(100,128,128,255)), (float4)(0,-128,-128,0));
-
-    //wirte results
-    vstore4(Lab, i, Out);
-}
-
-
-
-__kernel void xyz_to_luv(__global const float *In, __global float *Out) {
-
-    // Get the index of the current element to be processed
-    __private int i = get_global_id(0);
-
-    //read the pixel
-    __private float4 XYZ = vload4(i, In);
-
-    __private float4 var = 0;
-
-    //printf("Pixel in [%f,%f,%f,%f]\n", XYZ[0], XYZ[1], XYZ[2], XYZ[3]);
-
-    //convert to L*uv
-
-    var[0] = ( 4 * XYZ[0] ) / ( XYZ[0] + ( 15 * XYZ[1] ) + ( 3 * XYZ[2] ) );
-    var[1] = ( 9 * XYZ[1] ) / ( XYZ[0] + ( 15 * XYZ[1] ) + ( 3 * XYZ[2] ) );
-    
-    var[2] = XYZ[1] / 100;
-    if ( var[2] > 0.008856 )
-        var[2] = pow(var[2] , 1/3.0f);
-    else
-        var[2] = ( var[2] * 7.787f) + (16 / 116.0f);
-    
-    __private float2 ref = 0;
-
-    ref[0] = ( 4 * reference[0] ) / ( reference[0] + ( 15 * reference[1] ) + ( 3 * reference[2] ) );
-    ref[1] = ( 9 * reference[0] ) / ( reference[0] + ( 15 * reference[1] ) + ( 3 * reference[2] ) );
-
-    __private float4 Luv = 0;
-    Luv[0] = (116 * var[2]) - 16;
-    Luv[1] = 13 * Luv[0] * (var[0] / ref[0]);
-    Luv[2] = 13 * Luv[0] * (var[1] / ref[1]);
-    Luv[3] = XYZ[3];
-
-    Luv = max(min(Luv, (float4)(100,224,122,255)), (float4)(0,-134,-240,0));
-
-    //wirte results
-    vstore4(Luv, i, Out);
-}
-
-
-
-
-
-__kernel void lab_to_lch(__global const float *In, __global float *Out) {
-    // Get the index of the current element to be processed
-    __private int i = get_global_id(0);
-
-    //read the pixel
-    __private float4 lab = vload4(i, In);
-
-    //convert to L*ch
-
-    __private float var = atan2(lab[2],lab[1]);
-
-    if ( var > 0 )
-        var = ( var / M_PI_F ) * 180.0f;
-    else
-         var = 360 - ( fabs(var) / M_PI_F ) * 180.0f;
-
-    //wirte results
-
-    __private float4 lch = {
-        lab[0],
-        sqrt((lab[1]*lab[1]) + (lab[2]*lab[2])),
-        var,
-        lab[3]
-    };
-
-    
-    lch = max(min(lch, (float4)(100,100,360,255)), (float4)(0,0,0,0));
-
-    vstore4(lch, i, Out);
-
-}
-
-
-__kernel void lch_to_lab(__global const float *In, __global float *Out) {
-    // Get the index of the current element to be processed
-    __private int i = get_global_id(0);
-
-    //read the pixel
-    __private float4 lch = vload4(i, In);
-
-    //convert to L*ab
-    __private float4 lab = {
-        lch[0],
-        cos(radians(lch[2])) * lch[1] ,
-        sin(radians(lch[2])) * lch[1] ,
-        lch[3]
-    };
-    
-    lab = max(min(lab, (float4)(100,128,128,255)), (float4)(0,-128,-128,0));
-
-    vstore4(lab, i, Out);
-
-}
