@@ -241,7 +241,7 @@ __kernel void error_bleed(
             __private float dE = deltaE(og_pixel, dst_pixel);
 
             //printf("Pixel %d %d dE is %f\n", coords[0] , coords[1], dE);
-            if (FLT_LT(dE, 13.f)){
+            if (FLT_LT(dE, 1.f)){
                 atomic_add( &(err_buf[(error_index * 4) + 0]) , int_spread_error[0] );
                 atomic_add( &(err_buf[(error_index * 4) + 1]) , int_spread_error[1] );
                 atomic_add( &(err_buf[(error_index * 4) + 2]) , int_spread_error[2] );
