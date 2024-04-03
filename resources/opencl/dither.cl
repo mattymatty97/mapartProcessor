@@ -207,6 +207,8 @@ __kernel void error_bleed(
                         blacklisted_states[1] = 1;
                     printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
                 }
+            }else{
+                valid = 1;
             }
         }else{
             valid = 1;
