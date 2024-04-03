@@ -273,20 +273,10 @@ int main(int argc, char **argv) {
             Lab_palette->minecraft_data_version = palette.minecraft_data_version;
             Lab_palette->palette = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(float));
 
-/*
-            int *palette_xyz_data = t_calloc(palette.palette_size * MULTIPLIER_SIZE * RGBA_SIZE, sizeof(int));
-            fprintf(stdout, "Converting palette to black_composite\n");
+            fprintf(stdout, "Converting palette to OK-L*ab\n");
             fflush(stdout);
-            ret = gpu_rgba_to_composite(&config.gpu, palette.palette, palette_xyz_data, MULTIPLIER_SIZE,
-                                        palette.palette_size);
-*/
-            if (ret == 0) {
-                fprintf(stdout, "Converting palette to OK-L*ab\n");
-                fflush(stdout);
-                ret = gpu_rgb_to_ok(&config.gpu,  palette.palette, Lab_palette->palette, MULTIPLIER_SIZE,
-                                    palette.palette_size);
-            }
-            //t_free(palette_xyz_data);
+            ret = gpu_rgb_to_ok(&config.gpu,  palette.palette, Lab_palette->palette, MULTIPLIER_SIZE,
+                                palette.palette_size);
         }
     }
 
@@ -651,7 +641,7 @@ int get_palette(mapart_palette *palette_o) {
 
             //set the forced values for id 0 ( Transparency )
             for (int i = 0; i < MULTIPLIER_SIZE; i++) {
-                unsigned int p_i = (MULTIPLIER_SIZE * RGBA_SIZE) + (i * RGBA_SIZE);
+                unsigned int p_i = (i * RGBA_SIZE);
                 palette[p_i + 0] = 0;
                 palette[p_i + 1] = 0;
                 palette[p_i + 2] = 0;
@@ -705,13 +695,6 @@ void palette_cleanup(mapart_palette *palette){
         if ( palette->is_supported != NULL ) {
             t_free(palette->is_supported);
             palette->is_supported = NULL;
-        }
-
-        if ( palette->palette_id_names != NULL ) {
-            for (int i = 0; i<palette->palette_size; i++)
-                t_free(palette->palette_id_names[i]);
-            t_free(palette->palette_id_names);
-            palette->palette_id_names = NULL;
         }
 
         if ( palette->palette_id_names != NULL ) {

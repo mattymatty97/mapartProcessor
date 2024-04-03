@@ -156,7 +156,7 @@ __kernel void error_bleed(
         tmp_d = 0;
         tmp_d2_sum = FLT_MAX;
 
-        if (alpha(pixel) > 0.3f){
+        if ( FLT_GT(alpha(pixel) , 0.3f) ){
             for(__private uchar p = 1; p < palette_indexes; p++){
                 if (valid_palette_ids[p])
                     for (__private uchar s = 0; s < 3; s++){
@@ -179,35 +179,39 @@ __kernel void error_bleed(
 
                     }
             }
+            if (min_index == 0){
+                printf("Pixel %d %d found nothing!\n", coords[0] , coords[1]);
+            }
         }
 
         __private char delta = STATE_TO_DELTA(min_state);
-        if (max_mc_height > 0 && min_index != 0){
-            if (liquid_palette_ids[min_index]){
-                //printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
-                //if this is a liquid
-                tmp_mc_height = LIQUID_DEPTH[min_state];
-            }else{
-                //if we're changing direction reset to 0
-                if ( delta == - SIGN(curr_mc_height) ){
-                    tmp_mc_height = delta;
-                    //printf("Pixel %d %d reset height was: %d\n", coords[0] , coords[1], curr_mc_height);
-                }else
-                    tmp_mc_height = curr_mc_height + delta;
-            }
+        if (min_index != 0){
+            if (max_mc_height > 0){
+                if (liquid_palette_ids[min_index]){
+                    //printf("Pixel %d %d choose water %d\n", coords[0] , coords[1], min_state);
+                    //if this is a liquid
+                    tmp_mc_height = LIQUID_DEPTH[min_state];
+                }else{
+                    //if we're changing direction reset to 0
+                    if ( delta == - SIGN(curr_mc_height) ){
+                        tmp_mc_height = delta;
+                        //printf("Pixel %d %d reset height was: %d\n", coords[0] , coords[1], curr_mc_height);
+                    }else
+                        tmp_mc_height = curr_mc_height + delta;
+                }
 
-            valid = abs( tmp_mc_height ) < max_mc_height;
-            if (!valid){
-                blacklisted_states[min_state] = 1;
-                if ( FLT_LT(rand, 0.5f) )
-                    blacklisted_states[1] = 1;
-                printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
+                valid = abs( tmp_mc_height ) < max_mc_height;
+                if (!valid){
+                    blacklisted_states[min_state] = 1;
+                    if ( FLT_LT(rand, 0.5f) )
+                        blacklisted_states[1] = 1;
+                    printf("Pixel %d %d reached %d: Restricted\n", coords[0] , coords[1], tmp_mc_height);
+                }
             }
-
         }else{
             valid = 1;
             tmp_mc_height = 0;
-            if ( FLT_LT(og_pixel[4], 128.f) ){
+            if ( FLT_GT(alpha(pixel), 0.3f) ){
                 printf("Pixel %d %d defaulted to Transparent\n", coords[0] , coords[1]);
             }
         }
@@ -246,8 +250,6 @@ __kernel void error_bleed(
                 atomic_add( &(err_buf[(error_index * 4) + 1]) , int_spread_error[1] );
                 atomic_add( &(err_buf[(error_index * 4) + 2]) , int_spread_error[2] );
             }
-
-            atomic_add( &(err_buf[(error_index * 4) + 3]) , int_spread_error[3] );
         }
     }
 }

@@ -12,9 +12,9 @@
       "name": "AIR",
       "block_id": "minecraft:glass",
       "color": [
-        255,
-        255,
-        255
+        0,
+        0,
+        0
       ],
       "usable": true,
       "needs_support": false,
