@@ -11,7 +11,6 @@ typedef struct {
 	uint16_t z_length; // The length of the 3d mapart along the z axis
 	uint64_t volume; // The total volume a box encompassing the 3d mapart would have
 	unsigned int* layer_id_count; // 2d matrix containing the block count at a given layer with a given palette id
-    bool y0Fix;
 } mapart_stats;
 
 /// <summary>
@@ -33,4 +32,4 @@ typedef struct {
 /// <param name="version_info"></param>
 /// <param name="block_palette"></param>
 /// <param name="block_data"></param>
-void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data);
+void litematica_create(char* author, main_options config, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data);

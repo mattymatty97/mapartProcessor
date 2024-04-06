@@ -388,7 +388,7 @@ int main(int argc, char **argv) {
 
         //TODO: add config.fix_y0 boolean to litematica function parameters
         //TODO: add debug lines toggled with config.verbose to litematica code
-        litematica_create(PROGRAM_NAME, config.project_name, config.project_name, filename, &stats, versions, &palette, &mapart_data);
+        litematica_create(PROGRAM_NAME, config, filename, &stats, versions, &palette, &mapart_data);
     }
 
     palette_cleanup(&processed_palette);
