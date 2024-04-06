@@ -17,6 +17,8 @@ typedef struct {
 	int16_t z; // The z coord of this block
 } block_pos_data;
 
+main_options main_config;
+
 /// <summary>
 /// Compares 2 block_pos_data objects, sorting by y, then z, then x
 /// </summary>
@@ -58,8 +60,133 @@ bool is_upwards_shift_needed(mapart_palette* block_palette, mapart_stats* stats)
 	return false;
 }
 
+void check_surrounding_pixels_for_height(mapart_palette* block_palette, image_uint_data* block_data, bool* has_processed_pixel, int index, int height) {
+    if (index < 0 || index >= block_data->width * block_data->height)
+        return;
+    if (index < block_data->width && ((unsigned int*)block_data->image_data)[index * block_data->channels] == 0)
+        has_processed_pixel[index] = true; // If the block is in the header region and is glass just skip it since it'll be air
+    if (has_processed_pixel[index])
+        return;
+    if (((unsigned int*)block_data->image_data)[index * block_data->channels + 1] != height)
+        return;
+
+    has_processed_pixel[index] = true;
+
+    // Check pixel to north
+    check_surrounding_pixels_for_height(block_palette, block_data, has_processed_pixel, index - block_data->width, height);
+
+    // Check pixel to south
+    check_surrounding_pixels_for_height(block_palette, block_data, has_processed_pixel, index + block_data->width, height);
+
+    // Check pixel to west
+    check_surrounding_pixels_for_height(block_palette, block_data, has_processed_pixel, index - 1, height);
+
+    // Check pixel to east
+    check_surrounding_pixels_for_height(block_palette, block_data, has_processed_pixel, index + 1, height);
+}
+
+int get_ease_of_building_index(mapart_palette* block_palette, image_uint_data* block_data) {
+    int ease_of_building_index = 0;
+    bool* has_processed_pixel = t_calloc(block_data->height * block_data->width, sizeof(bool));
+
+    for (int z = 0; z < block_data->height; z++) {
+        for (int x = 0; x < block_data->width; x++) {
+            int index = z * block_data->width + x;
+            int cur_height = (int)((unsigned int*)block_data->image_data)[index * block_data->channels + 1];
+            if (!has_processed_pixel[index]) {
+                check_surrounding_pixels_for_height(block_palette, block_data, has_processed_pixel, index, cur_height);
+                ease_of_building_index++;
+            }
+        }
+    }
+    t_free(has_processed_pixel);
+
+    return ease_of_building_index;
+}
+
+int* get_max_up_shifts_allowed(image_uint_data* block_data) {
+    int* max_up_shifts_allowed = t_calloc(block_data->height * block_data->width, sizeof(int));
+
+    for (int x = 0; x < block_data->width; x++) {
+        int start_z = 0;
+        if (((unsigned int*)block_data->image_data)[x * block_data->channels] == 0) {
+            start_z = 1;
+            max_up_shifts_allowed[x] = -1;
+        }
+
+        int stair_start = start_z;
+        int prev_height = (int)((unsigned int*)block_data->image_data)[(start_z * block_data->width + x) * block_data->channels + 1];
+        bool was_going_up = true;
+        int max_shift = main_config.maximum_height - prev_height;
+        max_up_shifts_allowed[start_z * block_data->width + x] = max_shift;
+        for (int z = start_z + 1; z < block_data->height; z++) {
+            int index = z * block_data->width + x;
+            int cur_height = (int)((unsigned int*)block_data->image_data)[index * block_data->channels + 1];
+            if (was_going_up) {
+                if (cur_height > prev_height) {
+                    max_shift--;
+                }
+                else if (cur_height != prev_height) {
+                    for (int z2 = stair_start; z2 < z; z2++) {
+                        max_up_shifts_allowed[z2 * block_data->width + x] = max_shift;
+                    }
+                    max_shift = main_config.maximum_height - 1;
+                    stair_start = z;
+                    was_going_up = false;
+                }
+            }
+            else {
+                if (cur_height < prev_height) {
+                    max_shift--;
+                }
+                else if (cur_height != prev_height) {
+                    if (max_shift < max_up_shifts_allowed[(stair_start - 1) * block_data->width + x])
+                        max_up_shifts_allowed[(stair_start - 1) * block_data->width + x] = max_shift;
+                    for (int z2 = stair_start; z2 < z; z2++) {
+                        max_up_shifts_allowed[z2 * block_data->width + x] = max_shift;
+                    }
+                    max_shift = main_config.maximum_height - 1;
+                    stair_start = z;
+                    was_going_up = true;
+                }
+            }
+            prev_height = cur_height;
+        }
+        if (was_going_up) {
+            for (int z2 = stair_start; z2 < block_data->height; z2++) {
+                max_up_shifts_allowed[z2 * block_data->width + x] = max_shift;
+            }
+        }
+        else {
+            if (max_shift < max_up_shifts_allowed[(stair_start - 1) * block_data->width + x])
+                max_up_shifts_allowed[(stair_start - 1) * block_data->width + x] = max_shift;
+            for (int z2 = stair_start; z2 < block_data->height; z2++) {
+                max_up_shifts_allowed[z2 * block_data->width + x] = max_shift;
+            }
+        }
+    }
+
+    /*int index = 0;
+    for (int z = 0; z < block_data->height; z++) {
+        for (int x = 0; x < block_data->width; x++) {
+            fprintf(stderr, "Max shift at (%d, %d): %d\n", z, x, max_up_shifts_allowed[index]);
+            fflush(stderr);
+            index++;
+        }
+    }*/
+
+    /*for (int i = 0; i < block_data->width * block_data->height; i++) {
+        int new_height = max_up_shifts_allowed[i] + (int)((unsigned int*)block_data->image_data)[i * block_data->channels + 1];
+        ((unsigned int*)block_data->image_data)[i * block_data->channels + 1] = new_height;
+        ((unsigned int*)block_data->image_data)[i * block_data->channels + 2] = new_height;
+        if (new_height != 255) {
+            int q = 0;
+        }
+    }*/
+}
+
 //TODO: Add function documentation
-block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_data* block_data, int upwards_shift, bool y0Fix, int* all_blocks_len, int** region_block_lens, int** region_sizes, int** region_positions, char*** region_names, int* region_count) {
+block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_data* block_data, int upwards_shift, int* all_blocks_len, int** region_block_lens, int** region_sizes, int** region_positions, char*** region_names, int* region_count) {
     fprintf(stdout, "Getting all block data along with supporting blocks\n");
     fflush(stdout);
 
@@ -82,12 +209,19 @@ block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_dat
     *region_positions = t_calloc((*region_count)*3, sizeof(int));
     *region_names = t_calloc(*region_count, sizeof(char*));
 
+    // Check if each color id is a mushroom stem
+    bool id_is_mushroom_stem[UCHAR_MAX + 1] = { 0 };
+    for (int id = 0; id < block_palette->palette_size; id++) {
+        id_is_mushroom_stem[id] = strstr(block_palette->palette_block_ids[id], "minecraft:mushroom_stem") != NULL;
+    }
+
     block_pos_data* out_iter = all_block_data;
     unsigned int* in_data = block_data->image_data;
 
     int channels = block_data->channels;
     unsigned int cur_block_id;
     int cur_height;
+    *all_blocks_len = 0;
 
     // Get 'header' region blocks
     int in_index = 0;
@@ -95,22 +229,25 @@ block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_dat
     int min_height = (int)in_data[1] + upwards_shift;
     for (int x = 0; x < block_data->width; x++) {
         cur_block_id = in_data[in_index];
-        cur_height = (int)in_data[in_index + 1] + upwards_shift;
+        // Ignore glass blocks with id 0
+        if (cur_block_id != 0) {
+            cur_height = (int) in_data[in_index + 1] + upwards_shift;
 
-        out_iter->block_id = cur_block_id;
-        out_iter->x = (short)x;
-        out_iter->y = (short)cur_height;
-        out_iter->z = 0;
+            out_iter->block_id = cur_block_id;
+            out_iter->x = (short) x;
+            out_iter->y = (short) cur_height;
+            out_iter->z = 0;
 
-        max_height = cur_height > max_height ? cur_height : max_height;
-        min_height = cur_height < min_height ? cur_height : min_height;
+            max_height = cur_height > max_height ? cur_height : max_height;
+            min_height = cur_height < min_height ? cur_height : min_height;
 
+            (*all_blocks_len)++;
+            out_iter++;
+        }
         in_index += channels;
-        out_iter++;
     }
     // Store the 'header' region's information
-    *all_blocks_len = block_data->width;
-    (*region_block_lens)[0] = block_data->width;
+    (*region_block_lens)[0] = *all_blocks_len;
     (*region_sizes)[0] = block_data->width;
     (*region_sizes)[1] = max_height - min_height + 1;
     (*region_sizes)[2] = 1;
@@ -136,6 +273,30 @@ block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_dat
                     int y_max = (int)in_data[in_index + 2] + upwards_shift;
                     int y_min = (int)in_data[in_index + 1] + upwards_shift;
                     for (cur_height = y_max; cur_height >= y_min; cur_height--) {
+                        // If the block is a mushroom stem do custom checks for surrounding mushroom stem blocks
+                        if (id_is_mushroom_stem[cur_block_id]) {
+                            int stem_type = 0;
+                            if (in_index - block_data->width * channels >= 0) {
+                                unsigned int *north_block = &in_data[in_index - block_data->width * channels];
+                                stem_type |= (id_is_mushroom_stem[north_block[0]] && north_block[1] + upwards_shift == cur_height) << 3;
+                            }
+                            if (in_index + block_data->width * channels < block_data->width * block_data->height * channels) {
+                                unsigned int *south_block = &in_data[in_index + block_data->width * channels];
+                                stem_type |= (id_is_mushroom_stem[south_block[0]] && south_block[1] + upwards_shift == cur_height) << 2;
+                            }
+                            if (in_index - channels >= 0) {
+                                unsigned int *west_block = &in_data[in_index - channels];
+                                stem_type |= (id_is_mushroom_stem[west_block[0]] && west_block[1] + upwards_shift == cur_height) << 1;
+                            }
+                            if (in_index + channels < block_data->width * block_data->height * channels) {
+                                unsigned int *east_block = &in_data[in_index + channels];
+                                stem_type |= (id_is_mushroom_stem[east_block[0]] && east_block[1] + upwards_shift == cur_height);
+                            }
+
+                            // Set the new block_id to a value between 239 and 254
+                            cur_block_id = UCHAR_MAX - 16 + stem_type;
+                        }
+
                         // Add the block data to the new array
                         out_iter->block_id = cur_block_id;
                         out_iter->x = (short)x;
@@ -152,7 +313,7 @@ block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_dat
                     in_index += channels;
 
                     // If the block placed was at y0 and y0Fix is true
-                    if (y_max == 0 && y0Fix) {
+                    if (y_max == 0 && main_config.fix_y0) {
                         // Add a glass block above
                         out_iter->block_id = 0;
                         out_iter->x = (short)x;
@@ -189,7 +350,7 @@ block_pos_data* get_all_block_data(mapart_palette* block_palette, image_uint_dat
             (*region_positions)[region_index * 3] = region_index_x * 128;
             (*region_positions)[region_index * 3 + 1] = min_height;
             (*region_positions)[region_index * 3 + 2] = region_index_z * 128;
-            sprintf(buffer, "Map %d_%d", region_index_x + 1, region_index_z + 1);
+            sprintf(buffer, "Map %d_%d", region_index_z + 1, region_index_x + 1);
             (*region_names)[region_index] = t_strdup(buffer);
 
             region_index++;
@@ -204,9 +365,25 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
     fprintf(stdout, "Getting new block palettes to use\n");
     fflush(stdout);
 
-    // Buffer for string manipulation
-    char buffer[1000] = { 0 };
-
+    // Stem variants for if mushroom stems are next to each other
+    const char* stem_variants[16] = {
+            "minecraft:mushroom_stem",
+            "minecraft:mushroom_stem[east=false]",
+            "minecraft:mushroom_stem[west=false]",
+            "minecraft:mushroom_stem[west=false, east=false]",
+            "minecraft:mushroom_stem[south=false]",
+            "minecraft:mushroom_stem[south=false, east=false]",
+            "minecraft:mushroom_stem[south=false, west=false]",
+            "minecraft:mushroom_stem[south=false, west=false, east=false]",
+            "minecraft:mushroom_stem[north=false]",
+            "minecraft:mushroom_stem[north=false, east=false]",
+            "minecraft:mushroom_stem[north=false, west=false]",
+            "minecraft:mushroom_stem[north=false, west=false, east=false]",
+            "minecraft:mushroom_stem[north=false, south=false]",
+            "minecraft:mushroom_stem[north=false, south=false, east=false]",
+            "minecraft:mushroom_stem[north=false, south=false, west=false]",
+            "minecraft:mushroom_stem[north=false, south=false, west=false, east=false]",
+    };
     const char* air = "minecraft:air";
 
     // Create an array to store the new palette arrays
@@ -218,16 +395,19 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
     char*** curr_palette = new_block_palettes;
     block_pos_data* iter = all_block_data;
     for (int region_index = 0; region_index < region_count; region_index++) {
-        new_block_palettes[region_index] = t_calloc(UCHAR_MAX + 1, sizeof(char*));
+        (*curr_palette) = t_calloc(UCHAR_MAX + 2, sizeof(char*));
         (*curr_palette)[0] = strdup(air);
         (*new_block_palette_lens)[region_index] = 1;
 
         for (int i = 0; i < region_block_lens[region_index]; i++) {
             if (palette_id_map[iter->block_id] == 0) {
-                // TODO: Add mushroom stem checks if they are next to each other and give them their own palette index
                 // If the block_id has not been seen before, add the block name to the new palette and initialize the id in palette_id_map
                 if (iter->block_id == UCHAR_MAX) {
                     (*curr_palette)[(*new_block_palette_lens)[region_index]] = strdup(main_block_palette->support_block);
+                }
+                // If the block_id is a mushroom stem variation
+                else if (iter->block_id >= UCHAR_MAX - 16) {
+                    (*curr_palette)[(*new_block_palette_lens)[region_index]] = strdup(stem_variants[iter->block_id - (UCHAR_MAX - 16)]);
                 }
                 else {
                     (*curr_palette)[(*new_block_palette_lens)[region_index]] = strdup(main_block_palette->palette_block_ids[iter->block_id]);
@@ -248,15 +428,20 @@ char*** get_new_block_palettes(mapart_palette* main_block_palette, block_pos_dat
         curr_palette++;
     }
 
+    t_free(palette_id_map);
+
     return new_block_palettes;
 }
 
 //TODO: Add function documentation
 int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_len, int block_palette_len, const int* region_size, const int* region_position, int* bit_packed_block_data_len) {
-    fprintf(stdout, "Getting bit-packed block data\n");
-    fflush(stdout);
+    if (main_config.verbose) {
+        fprintf(stdout, "Getting bit-packed block data\n");
+        fflush(stdout);
+    }
 
     int bits_per_block = (int)log2(block_palette_len - 1) + 1;
+    bits_per_block = bits_per_block < 2 ? 2 : bits_per_block; // Litematica doesn't allow for less than 2 bits per block
     uint64_t total_bits = region_size[0] * region_size[1] * region_size[2] * bits_per_block;
 	*bit_packed_block_data_len = (int)(total_bits >> 6) + ((total_bits & 63) > 0);
 	int64_t* bit_packed_block_data = t_calloc(*bit_packed_block_data_len, sizeof(int64_t));
@@ -312,13 +497,21 @@ int64_t* get_bit_packed_block_data(block_pos_data* block_data, int block_data_le
 }
 
 //TODO: Add function documentation
-void litematica_create(char* author, char* description, char* litematic_name, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data) {
+void litematica_create(char* author, main_options config, char* file_name, mapart_stats* stats, version_numbers version_info, mapart_palette* block_palette, image_uint_data* block_data) {
     fprintf(stdout, "Creating litematica file from image\n");
     fflush(stdout);
+
+    main_config = config;
 
     // Buffers for string manipulation
 	char buffer[1000] = { 0 };
     char buffer2[1000] = { 0 };
+
+    /*int building_index = get_ease_of_building_index(block_palette, block_data);
+    fprintf(stdout, "Building index is %d\n", building_index);
+    fflush(stdout);*/
+
+    //get_max_up_shifts_allowed(block_data);
 
 	// Add the support blocks to the block data and reorganize it into a block_pos_data array
 	int upwards_shift = is_upwards_shift_needed(block_palette, stats);
@@ -328,7 +521,7 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
     int* region_sizes;
     int* region_positions;
     char** region_names;
-    block_pos_data* all_block_data = get_all_block_data(block_palette, block_data, upwards_shift, stats->y0Fix, &all_blocks_len, &region_block_lens, &region_sizes, &region_positions, &region_names, &region_count);
+    block_pos_data* all_block_data = get_all_block_data(block_palette, block_data, upwards_shift, &all_blocks_len, &region_block_lens, &region_sizes, &region_positions, &region_names, &region_count);
 
     // Sort the new block data by y, then z, then x for each region separately
     int all_blocks_offset = 0;
@@ -360,8 +553,8 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 			add_tag_to_compound_parent(tagEncSize, tagMeta);
 
 			create_child_string_tag("Author", author, tagMeta);
-			create_child_string_tag("Description", description, tagMeta);
-			create_child_string_tag("Name", litematic_name, tagMeta);
+			create_child_string_tag("Description", "Automatically created by mapartProcessor program", tagMeta);
+			create_child_string_tag("Name", main_config.project_name, tagMeta);
 			create_child_int_tag("RegionCount", region_count, tagMeta);
 			create_child_long_tag("TimeCreated", time(0), tagMeta); // Set the time created & modified to the current time
 			create_child_long_tag("TimeModified", time(0), tagMeta);
@@ -370,12 +563,17 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 		}
 		add_tag_to_compound_parent(tagMeta, tagTop);
 
+        fprintf(stdout, "Creating Litematica Block Regions\n");
+        fflush(stdout);
+
 		nbt_tag_t* tagRegions = create_compound_tag("Regions");
 		{
             all_blocks_offset = 0;
             for (int region_index = 0; region_index < region_count; region_index++) {
-                fprintf(stdout, "Creating Region #%d\n", region_index);
-                fflush(stdout);
+                if (main_config.verbose) {
+                    fprintf(stdout, "Creating Region #%d\n", region_index);
+                    fflush(stdout);
+                }
 
                 nbt_tag_t* tagMain = create_compound_tag(region_names[region_index]);
                 {
@@ -473,9 +671,15 @@ void litematica_create(char* author, char* description, char* litematic_name, ch
 	}
 
 	// Free the allocated memory
-	/*t_free(new_block_palette);
-	t_free(new_palette_id_map);
-	t_free(supported_block_data);*/
+    t_free(all_block_data);
+    t_free(region_block_lens);
+    t_free(region_sizes);
+    t_free(region_positions);
+    t_free(region_names);
+    for (int i = 0; i < region_count; i++) {
+        t_free(new_block_palettes[i]);
+    }
+    t_free(new_block_palettes);
 
     fprintf(stdout, "Saving litematica file\n");
     fflush(stdout);
