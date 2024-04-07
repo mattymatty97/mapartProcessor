@@ -213,10 +213,17 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Not a valid dither algorithm %s", config.dithering);
             ret = 46;
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
+
 
     if (ret == 0) {
         ret = load_image(&image);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     //if everything is ok
@@ -234,6 +241,9 @@ int main(int argc, char **argv) {
         //load image palette
         ret = get_palette(&palette);
 
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     //if we're still fine
@@ -278,6 +288,9 @@ int main(int argc, char **argv) {
             ret = gpu_rgb_to_ok(&config.gpu,  palette.palette, Lab_palette->palette, MULTIPLIER_SIZE,
                                 palette.palette_size);
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     image_uchar_data dithered_image = {
@@ -333,11 +346,17 @@ int main(int argc, char **argv) {
         ret = dither_func(&config.gpu, processed_image.image_data, dithered_image.image_data, processed_palette.palette, processed_palette.is_usable, processed_palette.is_liquid, noise, image.width, image.height, palette.palette_size, config.maximum_height);
 
         t_free(noise);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     //save result
     if (ret == 0) {
         ret = save_image(&palette, &dithered_image);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     //convert from palette to block and height
@@ -352,26 +371,29 @@ int main(int argc, char **argv) {
         fprintf(stdout, "Convert from palette to BlockId and height\n");
         fflush(stdout);
         ret = gpu_palette_to_height(&config.gpu, dithered_image.image_data, palette.is_liquid, mapart_data.image_data, palette.palette_size, image.width, image.height, config.maximum_height, &computed_max_height);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     if (ret == 0){
         fprintf(stdout, "Computed max height is: %d\n", computed_max_height);
         fflush(stdout);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     unsigned int* count_by_layer = NULL;
     unsigned int* count_by_layer_id = NULL;
     unsigned int* count_by_id = NULL;
 
-    if (ret == 0){
-        count_by_id = t_calloc(UCHAR_MAX + 1, sizeof (unsigned int));
-        count_by_layer = t_calloc(computed_max_height + 1, sizeof (unsigned int));
-        count_by_layer_id = t_calloc(( computed_max_height + 1 )  * ( UCHAR_MAX + 1 ), sizeof (unsigned int));
-        fprintf(stdout, "Generating Stats from converted image\n");
-        fflush(stdout);
-        ret = gpu_height_to_stats(&config.gpu, mapart_data.image_data, count_by_layer, count_by_layer_id, count_by_id, mapart_data.width, mapart_data.height, computed_max_height);
-    }
-
+    count_by_id = t_calloc(UCHAR_MAX + 1, sizeof (unsigned int));
+    count_by_layer = t_calloc(computed_max_height + 1, sizeof (unsigned int));
+    count_by_layer_id = t_calloc(( computed_max_height + 1 )  * ( UCHAR_MAX + 1 ), sizeof (unsigned int));
+    fprintf(stdout, "Generating Stats from converted image\n");
+    fflush(stdout);
+    ret = gpu_height_to_stats(&config.gpu, mapart_data.image_data, count_by_layer, count_by_layer_id, count_by_id, mapart_data.width, mapart_data.height, computed_max_height);
 
     if (ret == 0){
         mapart_stats stats = {};
@@ -389,6 +411,9 @@ int main(int argc, char **argv) {
         //TODO: add config.fix_y0 boolean to litematica function parameters
         //TODO: add debug lines toggled with config.verbose to litematica code
         litematica_create(PROGRAM_NAME, config, filename, &stats, versions, &palette, &mapart_data);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     palette_cleanup(&processed_palette);
@@ -697,11 +722,23 @@ void palette_cleanup(mapart_palette *palette){
             palette->is_supported = NULL;
         }
 
+        if ( palette->is_liquid != NULL ) {
+            t_free(palette->is_liquid);
+            palette->is_liquid = NULL;
+        }
+
         if ( palette->palette_id_names != NULL ) {
             for (int i = 0; i<palette->palette_size; i++)
                 t_free(palette->palette_id_names[i]);
             t_free(palette->palette_id_names);
             palette->palette_id_names = NULL;
+        }
+
+        if ( palette->palette_block_ids != NULL ) {
+            for (int i = 0; i<palette->palette_size; i++)
+                t_free(palette->palette_block_ids[i]);
+            t_free(palette->palette_block_ids);
+            palette->palette_block_ids = NULL;
         }
     }
 }

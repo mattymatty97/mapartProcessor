@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>
-#define TRACKER_MAX 2048
+#define TRACKER_MAX (1<<20)
 typedef struct  {
     void * ptr;
     size_t size;
 } tracker_t;
 
 static tracker_t tracker_l[TRACKER_MAX] = { 0 };
-static int track_last = 0;
+static long track_last = 0;
 
 int t_compare(const void * o1, const void * o2){
     if ( ((tracker_t *)o1)->ptr > ((tracker_t *)o2)->ptr)
@@ -23,6 +23,10 @@ void reorder(){
 }
 
 void track(tracker_t tracker){
+    if (track_last > TRACKER_MAX){
+        fprintf(stderr, "Allocator is out of space!!!!");
+        exit(-999);
+    }
     tracker_l[track_last++] = tracker;
     reorder();
 }

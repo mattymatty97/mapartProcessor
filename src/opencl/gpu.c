@@ -44,6 +44,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
             }
             total_devices += ret_num_devices[i];
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
 
@@ -86,10 +89,17 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
     if (ret == CL_SUCCESS)
         context = gpu_holder->context = clCreateContext(NULL, 1, &device_id[platform_index][device_index], NULL, NULL,
                                                         &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //if all is ok
     if (ret == CL_SUCCESS) {
         gpu_holder->commandQueue = clCreateCommandQueueWithProperties(context, device_id[platform_index][device_index],NULL, &ret);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     //compile programs
@@ -107,6 +117,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_holder->programs[0] = program;
 
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     if (ret == CL_SUCCESS) {
@@ -123,6 +136,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_holder->programs[1] = program;
 
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     if (ret == CL_SUCCESS) {
@@ -139,6 +155,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_holder->programs[2] = program;
 
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     if (ret == CL_SUCCESS) {
@@ -155,6 +174,9 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
 
         gpu_holder->programs[3] = program;
 
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     return ret;
@@ -203,6 +225,9 @@ cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *fi
                                   &log_size);
             fprintf(stderr, "Error compiling %s:\n%s\n\n", filename, build_log);
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d filename:%s\n",__FILE_NAME__,__LINE__, *ret, filename);
+        exit(*ret);
     }
     free(source_str);
     return NULL;
@@ -227,6 +252,9 @@ cl_program gpu_compile_embedded_program(main_options *config, gpu_t *gpu_holder,
                                   &log_size);
             fprintf(stderr, "Error compiling %s:\n%s\n\n", filename, build_log);
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d filename:%s\n",__FILE_NAME__,__LINE__, *ret, filename);
+        exit(*ret);
     }
     return NULL;
 }
@@ -247,42 +275,79 @@ int gpu_rgba_to_composite(gpu_t *gpu, int *input, int *output, unsigned int widt
     if (ret == CL_SUCCESS)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         buffer_size * sizeof(int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(int), input, 0,
                                    NULL,  &event[0]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[0].program, "rgba_composite", &ret);
+    else{
+    fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+    exit(ret);
+    }
 
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
+
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *) &output_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     size_t global_item_size = width * height;
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == 0)
+    if (ret == CL_SUCCESS)
         ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
                                      &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(int), output, 1,
                                   &event[1], &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //wait for outputs
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(1, &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
@@ -311,21 +376,39 @@ int gpu_rgb_to_ok(gpu_t *gpu, int *input, float *output, unsigned int width, uns
     if (ret == CL_SUCCESS)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         buffer_size * sizeof(float), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(int), input, 0,
                                    NULL,  &event[0]);
-
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[0].program, "rgb_to_ok", &ret);
-
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *) &output_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     size_t global_item_size = (size_t)width * height;
     size_t local_item_size = MIN(height, gpu->max_parallelism);
@@ -335,19 +418,35 @@ int gpu_rgb_to_ok(gpu_t *gpu, int *input, float *output, unsigned int width, uns
     if (ret == 0)
         ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 1,  &event[0],
                                      &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, buffer_size * sizeof(float), output, 1,
                                   &event[1], &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //wait for outputs
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(1, &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
@@ -401,30 +500,66 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
     if (ret == CL_SUCCESS)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         output_size * sizeof(unsigned char), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         error_buf_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                            buffer_size * sizeof(int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          palette_size * sizeof(float), palette, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         palette_id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                             palette_indexes * sizeof(unsigned char), valid_palette_ids, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         palette_liquid_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                             palette_indexes * sizeof(unsigned char), liquid_palette_ids, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         noise_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                        noise_size * sizeof(float), noise, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         height_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                        width * sizeof(int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         coord_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                                        width * height * 2 * sizeof(unsigned int), index_holder.indexes, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS && bleeding_count > 0)
         bleeding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                           bleeding_size * sizeof(int), bleeding_params, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //request clean the error buffer
     float pattern = 0;
@@ -432,60 +567,152 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_buf_mem_obj, &i_pattern, sizeof (int), 0, buffer_size * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
             ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &i_pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[2].program, "error_bleed", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         progress_kernel = clCreateKernel(gpu->programs[3].program, "progress", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     unsigned char arg_index = 0;
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &output_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &error_buf_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &palette_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &palette_id_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &palette_liquid_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &noise_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &height_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &coord_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &width);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &height);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &palette_indexes);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &bleeding_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &bleeding_count);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned char), (void *) &min_required_pixels);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //set progress kernel params
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(progress_kernel, 0, sizeof(const unsigned int), (void *) &width);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(progress_kernel, 1, sizeof(const unsigned int), (void *) &height);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //let all the fill operations complete first
     if (ret == CL_SUCCESS){
         ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, NULL);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
+
 
     //request the gpu process
     if (ret == CL_SUCCESS){
@@ -511,19 +738,35 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
                                              0,  NULL, NULL);
             }
         }
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
+
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
                                   output, 1, &event[0], &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(1, &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
@@ -720,53 +963,109 @@ int gpu_palette_to_rgb(gpu_t *gpu, unsigned char *input, int *palette, unsigned 
     if (ret == CL_SUCCESS)
         palette_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY,
                                          palette_size * sizeof(int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_WRITE_ONLY,
                                         output_size * sizeof(unsigned char), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //copy input into the memory object
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, input_mem_obj, CL_TRUE, 0, buffer_size * sizeof(unsigned char),
                                    input, 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueWriteBuffer(gpu->commandQueue, palette_mem_obj, CL_TRUE, 0, palette_size * sizeof(int), palette,
                                    0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[1].program, "palette_to_rgb", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *) &palette_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *) &output_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 3, sizeof(const unsigned char), (void *) &palette_indexes);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, 4, sizeof(const unsigned char), (void *) &palette_variations);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     size_t global_item_size = width * height;
     size_t local_item_size = MIN(height, gpu->max_parallelism);
 
     //request the gpu process
-    if (ret == 0)
+    if (ret == CL_SUCCESS)
         ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL,
                                      NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned char),
                                   output, 0, NULL, &event[0]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(1, &event[0]);
+    else{
+        fprintf(stderr,"Fail while waiting %s:%d", __FILE_NAME__,__LINE__);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
@@ -807,31 +1106,62 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 
     input_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                    buffer_size * sizeof(unsigned char), input, &ret);
-    if (ret ==0){
+    if (ret == CL_SUCCESS){
         liquid_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                        palette_size * sizeof(unsigned char), is_liquid, &ret);
+    }else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
 
     if (ret == CL_SUCCESS)
         output_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                         output_size * sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         error_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                                  sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         height_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(int), NULL, &ret);
 
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         index_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(unsigned int), NULL, &ret);
 
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         padding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(int), NULL, &ret);
 
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         flat_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,width * sizeof(unsigned int), NULL, &ret);
 
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         max_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //request clean the error indicator
     unsigned int pattern = 0;
@@ -839,61 +1169,153 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, error_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, max_mem_obj, &pattern, sizeof(unsigned int), 0, sizeof(unsigned int), 0,  NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, height_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
             ret = clEnqueueFillBuffer(gpu->commandQueue, index_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
             ret = clEnqueueFillBuffer(gpu->commandQueue, padding_mem_obj, &pattern2, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
             ret = clEnqueueFillBuffer(gpu->commandQueue, flat_mem_obj, &pattern, sizeof (int), 0, width * sizeof(int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //let all the fill operations complete first
     if (ret == CL_SUCCESS){
         ret = clEnqueueBarrierWithWaitList(gpu->commandQueue, 0, NULL, NULL);
+    }    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
+
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[1].program, "palette_to_height", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         progress_kernel = clCreateKernel(gpu->programs[3].program, "progress", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     unsigned char arg_index = 0;
     //set kernel arguments
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &liquid_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &output_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &error_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &height_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &index_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &padding_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &flat_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &width);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const unsigned int), (void *) &height);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(const int), (void *) &max_minecraft_y);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &max_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
 
     //set progress kernel params
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(progress_kernel, 0, sizeof(const unsigned int), (void *) &width);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(progress_kernel, 1, sizeof(const unsigned int), (void *) &height);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //request the gpu process
     if (ret == CL_SUCCESS){
@@ -919,13 +1341,21 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
                                              0,  NULL, NULL);
             }
         }
+    }    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
     }
+
 
     //read the outputs
     unsigned int error_status = 0;
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, error_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
                                   &error_status, 1, &event[0], &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS && error_status > 0) {
         fprintf(stderr, "Kernel returned error!\n");
@@ -935,17 +1365,33 @@ int gpu_palette_to_height(gpu_t *gpu, unsigned char *input, unsigned char *is_li
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, max_mem_obj, CL_TRUE, 0, sizeof(unsigned int),
                                   computed_max_minecraft_y, 1, &event[1], &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, output_mem_obj, CL_TRUE, 0, output_size * sizeof(unsigned int),
                                   output, 1, &event[2], &event[3]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(1, &event[3]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);
@@ -995,37 +1441,81 @@ int gpu_height_to_stats(gpu_t *gpu, unsigned int *input, unsigned int *layer_cou
     if (ret == CL_SUCCESS)
         layer_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                         layer_size * sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         layer_id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                         layer_id_size * sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (ret == CL_SUCCESS)
         id_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_WRITE,
                                         id_size * sizeof(unsigned int), NULL, &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     unsigned int zero = 0;
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, layer_mem_obj, &zero, sizeof (unsigned int), 0, layer_size * sizeof(unsigned int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, layer_id_mem_obj, &zero, sizeof (unsigned int), 0, layer_id_size * sizeof(unsigned int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueFillBuffer(gpu->commandQueue, id_mem_obj, &zero, sizeof (unsigned int), 0, id_size * sizeof(unsigned int), 0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //create kernel
     if (ret == CL_SUCCESS)
         kernel = clCreateKernel(gpu->programs[1].program, "height_to_stats", &ret);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //set kernel arguments
     unsigned char arg_index = 0;
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &input_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &layer_id_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), (void *) &id_mem_obj);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     size_t global_item_size = width * height;
     size_t local_item_size = MIN(height, gpu->max_parallelism);
@@ -1033,30 +1523,59 @@ int gpu_height_to_stats(gpu_t *gpu, unsigned int *input, unsigned int *layer_cou
 
     if (ret == CL_SUCCESS)
         ret = clEnqueueBarrierWithWaitList(gpu->commandQueue,0, NULL, NULL);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //request the gpu process
     if (ret == CL_SUCCESS)
         ret = clEnqueueNDRangeKernel(gpu->commandQueue, kernel, 1, NULL, &global_item_size, &local_item_size, 0,  NULL,
                                      &event[0]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //read the outputs
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, layer_mem_obj, CL_TRUE, 0, layer_size * sizeof(unsigned int), layer_count, 0,
                                   NULL, &event[1]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
+
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, layer_id_mem_obj, CL_TRUE, 0, layer_id_size * sizeof(unsigned int), layer_id_count, 0,
-                                  NULL, &event[2]);
+    NULL, &event[2]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
     if (ret == CL_SUCCESS)
         ret = clEnqueueReadBuffer(gpu->commandQueue, id_mem_obj, CL_TRUE, 0, id_size * sizeof(unsigned int), id_count, 0,
                                   NULL, &event[3]);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //wait for outputs
     if (ret == CL_SUCCESS)
         ret = clWaitForEvents(4, event);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     //flush remaining tasks
     if (ret == CL_SUCCESS)
         ret = clFlush(gpu->commandQueue);
+    else{
+        fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
+        exit(ret);
+    }
 
     if (kernel != NULL)
         clReleaseKernel(kernel);

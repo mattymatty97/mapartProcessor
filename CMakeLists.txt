@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 project(mapartProcessor C)
 
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set( RC_DEPENDS "" )
 
 function( add_resource input )
