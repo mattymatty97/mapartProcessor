@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <limits.h>
 #include "gpu.h"
 #include "../libs/alloc/tracked.h"
 
@@ -67,7 +68,7 @@ int gpu_init(main_options *config, gpu_t *gpu_holder) {
             fprintf(stdout, "please select a device to use (%%d %%d):\n");
             fflush(stdout);
             fflush(stdin);
-            fscanf(stdin, "%d %d", &platform_index, &device_index);
+            (void)!fscanf(stdin, "%d %d", &platform_index, &device_index);
         }
 
         fprintf(stdout, "Selected %s from %s\n", device_names[platform_index][device_index],
@@ -205,7 +206,7 @@ cl_program gpu_compile_program(main_options *config, gpu_t *gpu_holder, char *fi
     length = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     source_str = calloc(length + 1, sizeof(char));
-    fread(source_str, 1, length, fp);
+    (void)!fread(source_str, 1, length, fp);
     fclose(fp);
 
     if (*ret == CL_SUCCESS) {

@@ -1,13 +1,11 @@
 cmake_minimum_required(VERSION 3.26)
 project(mapartProcessor C)
 
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set( RC_DEPENDS "" )
 
 function( add_resource input )
     string( MAKE_C_IDENTIFIER ${input} input_identifier )
-    get_filename_component(input_dir ${input} DIRECTORY)
-    file( MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${input_dir}")
+    file( MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tmp")
     file( COPY_FILE "${CMAKE_SOURCE_DIR}/${input}" "${CMAKE_CURRENT_BINARY_DIR}/${input}")
     set( output "${CMAKE_CURRENT_BINARY_DIR}/tmp/${input_identifier}.o" )
     target_link_libraries(${PROJECT_NAME} PUBLIC ${output} )
@@ -43,7 +41,11 @@ include_directories(${PROJECT_NAME} ${OpenCL_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCL_LIBRARY})
 target_link_libraries(${PROJECT_NAME} PUBLIC ZLIB::ZLIB)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE -static)
+if (!UNIX)
+    target_link_libraries(${PROJECT_NAME} PRIVATE -static)
+else (!UNIX)
+    target_link_libraries(${PROJECT_NAME} PUBLIC m)
+endif (!UNIX)
 
 add_definitions(-DNBT_OWN_ZLIB="zlib.h")
 

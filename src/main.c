@@ -1,5 +1,6 @@
 #define PROGRAM_NAME "mapartProcessor-v1.3.1"
 
+#include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -26,24 +27,14 @@
 #include "opencl/gpu.h"
 
 
+
 #if defined(__WIN32__) || defined(__WIN64__) || defined(__WINNT__)
-
-#include <windows.h>
-
-unsigned long get_processor_count() {
-    SYSTEM_INFO siSysInfo;
-    GetSystemInfo(&siSysInfo);
-    return siSysInfo.dwNumberOfProcessors;
-}
-
+#define MKDIR(p) mkdir(p)
 #elif defined(__linux__)
-unsigned long get_processor_count(){
-    return sysconf(_SC_NPROCESSORS_ONLN);
-}
+#include <sys/stat.h>
+#define MKDIR(p) mkdir(p, 755)
 #else
-unsigned long get_processor_count(){
-    return 1;
-}
+
 #endif
 
 //--------------CONSTANTS-------------------
@@ -405,7 +396,7 @@ int main(int argc, char **argv) {
         versions.litematica = 6;
         versions.mc_data = palette.minecraft_data_version;
         char * folder = "litematica/";
-        mkdir(folder);
+        MKDIR(folder);
         char * filename = gen_filename(folder ,"");
 
         //TODO: add config.fix_y0 boolean to litematica function parameters
@@ -480,7 +471,7 @@ int save_image(mapart_palette *palette, image_data *dither_image) {
     ret = gpu_palette_to_rgb(&config.gpu, dither_image->image_data, palette->palette,
                              converted_image.image_data, dither_image->width, dither_image->height, palette->palette_size, MULTIPLIER_SIZE);
     char * folder = "images/";
-    mkdir(folder);
+    MKDIR(folder);
     char * filename = gen_filename(folder, ".png");
     if (ret == 0) {
         fprintf(stdout, "Save image\n");
@@ -518,7 +509,7 @@ int get_palette(mapart_palette *palette_o) {
     size_t lenght = ftell(palette_f);
     char* palette_str = t_calloc(lenght, sizeof (char));
     rewind(palette_f);
-    fread(palette_str, sizeof (char), lenght, palette_f);
+    (void)!fread(palette_str, sizeof (char), lenght, palette_f);
     fclose(palette_f);
 
     cJSON_Hooks hooks = {
