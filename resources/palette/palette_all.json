@@ -12,11 +12,11 @@
       "name": "AIR",
       "block_id": "minecraft:glass",
       "color": [
-        255,
-        255,
-        255
+        0,
+        0,
+        0
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -29,7 +29,7 @@
         178,
         56
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -42,7 +42,7 @@
         233,
         163
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -55,7 +55,7 @@
         199,
         199
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -68,7 +68,7 @@
         0,
         0
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -81,7 +81,7 @@
         160,
         255
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -94,20 +94,20 @@
         167,
         167
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
     {
       "id": 7,
       "name": "PLANT",
-      "block_id": "minecraft:oak_leaves",
+      "block_id": "minecraft:oak_leaves[persistent=true]",
       "color": [
         0,
         124,
         0
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -120,7 +120,7 @@
         255,
         255
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -133,7 +133,7 @@
         168,
         184
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -146,7 +146,7 @@
         109,
         77
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -159,20 +159,20 @@
         112,
         112
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
     {
       "id": 12,
       "name": "WATER",
-      "block_id": "minecraft:oak_leaves[waterlogged=true]",
+      "block_id": "minecraft:water",
       "color": [
         64,
         64,
         255
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  true
     },
@@ -185,7 +185,7 @@
         119,
         72
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -198,7 +198,7 @@
         252,
         245
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -211,7 +211,7 @@
         127,
         51
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -224,7 +224,7 @@
         76,
         216
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -237,7 +237,7 @@
         153,
         216
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -250,7 +250,7 @@
         229,
         51
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -263,7 +263,7 @@
         204,
         25
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -276,7 +276,7 @@
         127,
         165
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -302,7 +302,7 @@
         153,
         153
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -315,7 +315,7 @@
         127,
         153
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -328,7 +328,7 @@
         63,
         178
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -341,7 +341,7 @@
         76,
         178
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -354,7 +354,7 @@
         76,
         51
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -367,7 +367,7 @@
         127,
         51
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -380,7 +380,7 @@
         51,
         51
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -406,7 +406,7 @@
         238,
         77
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -419,7 +419,7 @@
         219,
         213
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -432,7 +432,7 @@
         128,
         255
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -445,7 +445,7 @@
         217,
         58
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -458,7 +458,7 @@
         86,
         49
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -471,7 +471,7 @@
         2,
         0
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -484,7 +484,7 @@
         177,
         161
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -497,7 +497,7 @@
         82,
         36
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -510,7 +510,7 @@
         87,
         108
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -523,7 +523,7 @@
         108,
         138
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -536,7 +536,7 @@
         133,
         36
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -549,7 +549,7 @@
         117,
         53
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -562,7 +562,7 @@
         77,
         78
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -575,7 +575,7 @@
         41,
         35
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -588,7 +588,7 @@
         107,
         98
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -601,7 +601,7 @@
         92,
         92
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -614,7 +614,7 @@
         73,
         88
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -627,7 +627,7 @@
         62,
         92
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -640,7 +640,7 @@
         50,
         35
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -653,7 +653,7 @@
         82,
         42
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -666,7 +666,7 @@
         60,
         46
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -679,7 +679,7 @@
         22,
         16
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -692,7 +692,7 @@
         48,
         49
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -705,7 +705,7 @@
         63,
         97
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -718,7 +718,7 @@
         25,
         29
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -731,7 +731,7 @@
         126,
         134
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -744,7 +744,7 @@
         142,
         140
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -757,7 +757,7 @@
         44,
         62
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -770,7 +770,7 @@
         180,
         133
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -783,7 +783,7 @@
         100,
         100
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -796,7 +796,7 @@
         175,
         147
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     },
@@ -809,7 +809,7 @@
         167,
         150
       ],
-      "usable": false,
+      "usable": true,
       "needs_support": false,
       "is_liquid":  false
     }
