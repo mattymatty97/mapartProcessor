@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <math.h>
+#include <limits.h>
 
 #include "litematica.h"
 #include "libs/globaldefs.h"
