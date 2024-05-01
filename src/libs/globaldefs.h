@@ -2,7 +2,6 @@
 #define GOBALDEFS_DEF
 
 #include <stdatomic.h>
-#include <pthread.h>
 
 #define GPU_CODE_NO_RECURSION
 

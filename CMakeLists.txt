@@ -5,7 +5,9 @@ set( RC_DEPENDS "" )
 
 function( add_resource input )
     string( MAKE_C_IDENTIFIER ${input} input_identifier )
+    get_filename_component(input_dir ${input} DIRECTORY)
     file( MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tmp")
+    file( MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${input_dir}")
     file( COPY_FILE "${CMAKE_SOURCE_DIR}/${input}" "${CMAKE_CURRENT_BINARY_DIR}/${input}")
     set( output "${CMAKE_CURRENT_BINARY_DIR}/tmp/${input_identifier}.o" )
     target_link_libraries(${PROJECT_NAME} PUBLIC ${output} )
@@ -24,7 +26,6 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/${CMAKE_BUILD_TYPE}/")
 
 find_package(OpenCL REQUIRED)
-find_package(ZLIB REQUIRED)
 
 include_directories(src)
 file(GLOB_RECURSE SOURCES RELATIVE ${CMAKE_SOURCE_DIR} "src/*.c")
@@ -39,14 +40,12 @@ add_resource("resources/opencl/dither.cl")
 
 include_directories(${PROJECT_NAME} ${OpenCL_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCL_LIBRARY})
-target_link_libraries(${PROJECT_NAME} PUBLIC ZLIB::ZLIB)
 
-if (!UNIX)
+if (NOT UNIX)
     target_link_libraries(${PROJECT_NAME} PRIVATE -static)
-else (!UNIX)
+else (NOT UNIX)
     target_link_libraries(${PROJECT_NAME} PUBLIC m)
-endif (!UNIX)
+endif (NOT UNIX)
 
-add_definitions(-DNBT_OWN_ZLIB="zlib.h")
 
 add_custom_target( rc ALL DEPENDS ${RC_DEPENDS} )

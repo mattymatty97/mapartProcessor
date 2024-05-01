@@ -104,8 +104,6 @@ int main(int argc, char **argv) {
     int c;
     opterr = 0;
 
-    unsigned long thread_count;
-
     int option_index = 0;
     while ((c = getopt_long(argc, argv, ":i:p:d:r:h:n:t:v0", long_options, &option_index)) != -1) {
         switch (c) {
@@ -664,7 +662,7 @@ int get_palette(mapart_palette *palette_o) {
                 palette[p_i + 3] = 0;
             }
 
-            is_usable[0] = true;
+            is_usable[0] = 1;
 
         }
 
