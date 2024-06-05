@@ -554,10 +554,11 @@ int gpu_internal_dither_error_bleed(gpu_t *gpu, float *input, unsigned char *out
         fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
         exit(ret);
     }
-    if (ret == CL_SUCCESS && bleeding_count > 0)
-        bleeding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                          bleeding_size * sizeof(int), bleeding_params, &ret);
-    else{
+    if (ret == CL_SUCCESS) {
+        if (bleeding_count > 0)
+            bleeding_mem_obj = clCreateBuffer(gpu->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                              bleeding_size * sizeof(int), bleeding_params, &ret);
+    }else{
         fprintf(stderr,"Fail at %s:%d code:%d\n",__FILE_NAME__,__LINE__, ret);
         exit(ret);
     }
