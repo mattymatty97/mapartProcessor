@@ -66,7 +66,7 @@ The index of this color. DO NOT MODIFY THIS
 	- `name`  
 The name of this color. DO NOT MODIFY THIS
 	- `block_id`  
-The block to be used for this color. Make sure to only put in blocks that match the current map color or the resulting mapart will be incorrect. The blocks for each map color in vanilla can be found here: https://minecraft.wiki/w/Map_item_format#Color_table
+The block to be used for this color. Make sure to only put in blocks that match the current map color or the resulting mapart will be incorrect. The blocks for each map color in vanilla can be found [here](https://minecraft.wiki/w/Map_item_format#Color_table)
 	- `color`  
 The RGB values of this color. DO NOT MODIFY THIS
 	- `usable`  
@@ -79,7 +79,7 @@ Whether this color's block is a liquid
 ### Extra information:
 - This tool will handle any images in `json` or `png` format.  
 - In case of png with `alpha channel` the program will handle the pixels using black composite and only consider as transparent pixels with alpha smaller than `30%`.  
-- All images will be converted to (Oklab colorspace)[https://bottosson.github.io/posts/oklab] before attempting to find the matching palette color.  
+- All images will be converted to [Oklab colorspace](https://bottosson.github.io/posts/oklab) before attempting to find the matching palette color.  
 - The program will account for `height limitations` and `fluid` colors.  
 - To avoid `horizontal lines` form being visible once the staircases are forcefully dropped (because you reached the height limit), the program uses an additional `noise image` (generate from the --seed option) to slightly offset the drop height for the staircases.  
 This is to spread around the drop points in order to generate a more natural image.  
