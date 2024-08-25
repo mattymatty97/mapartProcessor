@@ -77,7 +77,7 @@ Whether the schematic will place a block of type "support_block_id" underneath t
 Whether this color's block is a liquid
 
 ### Extra information:
-- This tool will handle any images in `json` or `png` format.  
+- This tool will handle any images in `jpeg` or `png` format.  
 - In case of png with `alpha channel` the program will handle the pixels using black composite and only consider as transparent pixels with alpha smaller than `30%`.  
 - All images will be converted to [Oklab colorspace](https://bottosson.github.io/posts/oklab) before attempting to find the matching palette color.  
 - The program will account for `height limitations` and `fluid` colors.  
